@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "韩语 YouTube 中文字幕",
+  "version": "0.1.0",
+  "description": "把 YouTube 的韩语字幕实时翻译成中文，叠加显示。",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://translate.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "韩语→中文字幕"
+  }
+}
