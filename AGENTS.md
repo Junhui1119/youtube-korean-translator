@@ -2,44 +2,45 @@
 
 Guidance for AI coding agents and contributors working in this repository.
 
+See [CLAUDE.md](CLAUDE.md) for the full project goals and detailed tech stack.
+
 ## Project
 
-Chrome (Manifest V3) extension that translates Korean YouTube captions to Chinese in real time. Pure frontend — no backend, no API key.
-
-## Commands
-
-```bash
-npm test   # run the unit test suite (Node built-in test runner)
-```
-
-- Requires Node 18+.
-- There is **no build step** and **no third-party dependencies**.
+Real-time translation tool for Korean YouTube livestreams and videos: capture
+audio → speech-to-text → LLM translation → push Chinese subtitles back to the
+viewer. Ships with a Web console for accounts, translation history, and a
+Korean vocabulary notebook.
 
 ## Architecture
 
-- **content.js** — thin browser glue: a `MutationObserver` reads the on-screen
-  Korean caption text and renders the translated overlay. Tested manually in a
-  real browser.
-- **background.js** — service worker (`"type": "module"`). Wires the pure
-  modules together and handles `{ type: "translate", text }` messages.
-- **src/** — all unit-testable logic lives here as pure ES modules:
-  - `translate.js` — build the translate URL, parse the response, `translateText`.
-  - `cache.js` — in-memory translation cache.
-  - `translator-core.js` — orchestration (check cache → translate → store).
-- **popup.html / popup.js** — enable/disable toggle (`chrome.storage.local`).
+Three parts (planned monorepo layout):
 
-Keep logic in `src/` so it can be unit-tested without a browser. Keep
-`content.js` as thin DOM I/O only.
+- **extension/** — Chrome browser extension (React + Vite, Tailwind). Captures
+  livestream/video audio and streams audio chunks to the backend over a
+  WebSocket; renders the returned Chinese subtitles.
+- **web/** — Web console / marketing site (React + Vite, deployed on Cloudflare
+  Pages). Register/login, view the vocabulary notebook and translation history.
+- **backend/** — FastAPI service (deployed on Render / Railway):
+  - WebSocket module — long-lived connection to the extension; receives audio chunks.
+  - AI module — STT (Whisper) → Korean text → LLM (GPT-4o / DeepL) → Chinese → push back.
+  - API module — HTTP routes for register/login/vocabulary/history.
+- **PostgreSQL** (Supabase / Neon) — tables: `users`, `history_records`,
+  `vocabulary_notebook`.
+
+## Tech stack
+
+- Frontend: React + Vite + Tailwind CSS; deployed on Cloudflare Pages.
+- Backend: FastAPI (Python); deployed on Render / Railway.
+- AI: Whisper (STT), GPT-4o / DeepL (translation).
+- Database: PostgreSQL via Supabase / Neon.
+- Transport: WebSocket for the real-time audio/subtitle stream; REST for the rest.
 
 ## Conventions
 
-- Plain JavaScript, ES Modules. No TypeScript, no bundler.
-- Manifest V3; service worker uses `"type": "module"`.
-- Zero runtime/test dependencies — tests use `node:test` + `node:assert`.
-- Follow TDD: write the failing test first, then the minimal implementation.
-- Translation direction is fixed for v1: source `ko` → target `zh-CN`.
-- All translation network requests go through the background service worker
-  (avoids content-script CORS).
+- Keep the three parts (extension / web / backend) decoupled; they communicate
+  only over the WebSocket and HTTP APIs.
+- Never commit secrets (API keys, DB connection strings, tokens) — use
+  environment variables.
 - Commit in small, focused steps with clear messages.
 
 ## Reference docs
@@ -47,8 +48,9 @@ Keep logic in `src/` so it can be unit-tested without a browser. Keep
 - Design spec: `docs/superpowers/specs/2026-06-24-youtube-korean-translator-design.md`
 - Implementation plan: `docs/superpowers/plans/2026-06-24-youtube-korean-translator.md`
 
-These define the v1 scope and the task-by-task plan. Read them before making
-non-trivial changes.
+> Note: the design spec and plan currently describe an earlier, simpler v1
+> (read existing captions, pure-frontend, free Google Translate). They will be
+> updated to match the architecture above.
 
 ## Tooling
 
