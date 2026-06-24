@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+
 export default function App() {
   const [msg, setMsg] = useState("加载中…");
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch("/api/hello")
+    fetch(`${apiBaseUrl}/api/hello`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
