@@ -1,3 +1,30 @@
+# Project: 韩语直播/视频翻译插件
+
+## What this is
+- 这个项目用来实时翻译韩语游戏直播以及视频的插件
+- 给非韩语母语者使用
+- 解决Youtube直播/视频app没有实时翻译的问题
+
+## Tech stack
+- 前端：React + Vite + Tailwind CSS
+- 部署平台：Cloudflare Pages
+- 包含两个部分：
+- Chrome 浏览器插件：用 React + Vite 开发，打包后作为扩展程序嵌入到用户的浏览器中。负责抓取直播间音频，并通过 WebSocket 发送给后端。
+- 用户 Web 控制台/官网：同样用 React + Vite 开发，部署在 Cloudflare Pages。用户可以在这里注册、登录、查看自己的韩语生词本和历史翻译记录。
+
+- 后端：FastAPI
+- 部署平台：Render 或 Railway
+- 核心模块：WebSocket 模块：负责跟浏览器插件建立长连接，实时接收传入的音频切片（Audio Chunks）
+- AI 对接模块：调用语音转文字（STT，如 OpenAI Whisper）获取韩文文本 -> 调用大模型（如 GPT-4o 或 DeepL）翻译为中文 -> 通过 WebSocket 实时推回给前端插件渲染
+- API 路由模块：处理常规的 HTTP 请求，如用户注册、登录、获取生词本列表等。
+
+- 数据库：PostgreSQL
+- 托管平台：Supabase 或 Neon（它们都提供免费的、托管好的云端 PostgreSQL，提供标准的连接字符串，FastAPI 可以直接连接）。
+- 表结构设计：
+- users 表：存储账号、密码（加盐哈希）、Token。
+- history_records 表：存储用户的翻译历史。
+- vocabulary_notebook 表：存储用户一键收藏的韩语生词和释义。
+
 # gstack
 
 For all web browsing, use the `/browse` skill from gstack. Never use the `mcp__claude-in-chrome__*` tools.
@@ -66,3 +93,9 @@ Common commands:
 - `specify version` — display version and system information
 - `specify self` — manage/upgrade the specify CLI itself
 - `specify workflow` — manage and run automation workflows
+
+## Commands
+
+## Conventions
+
+## Current focus
