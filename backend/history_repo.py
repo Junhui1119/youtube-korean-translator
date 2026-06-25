@@ -57,7 +57,7 @@ LIMIT $2 OFFSET $3
 
 async def list_history(
     pool: asyncpg.Pool,
-    user_id,
+    user_id: uuid.UUID,
     limit: int = 50,
     offset: int = 0,
 ) -> list[dict]:

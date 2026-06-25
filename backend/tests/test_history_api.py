@@ -45,8 +45,19 @@ async def test_get_history_pagination_param(client):
 
 
 async def test_invalid_user_id_header_rejected():
+    assert db._pool is None
     # 不覆盖鉴权依赖，传非法 X-User-Id 应 400
     transport = ASGITransport(app=main.app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         r = await c.get("/api/history", headers={"X-User-Id": "not-a-uuid"})
     assert r.status_code == 400
+
+
+async def test_get_history_rejects_negative_offset(client):
+    r = await client.get("/api/history", params={"offset": -1})
+    assert r.status_code == 422
+
+
+async def test_get_history_rejects_limit_over_max(client):
+    r = await client.get("/api/history", params={"limit": 100000000})
+    assert r.status_code == 422

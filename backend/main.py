@@ -2,7 +2,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from pydantic import BaseModel
 
 import db
@@ -67,7 +67,7 @@ async def post_history(
 @app.get("/api/history", response_model=list[HistoryItem])
 async def get_history(
     user_id: uuid.UUID = Depends(get_current_user_id),
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
 ) -> list[dict]:
     return await history_repo.list_history(db.get_pool(), user_id, limit, offset)

@@ -27,6 +27,8 @@ psql "$DATABASE_URL" -f schema.sql
 ```
 
 - `POST /api/history`：记录一次观看（body: `video_id, title, channel?, last_position?`），upsert 去重，每用户最多保留 200 条。
-- `GET /api/history?limit=&offset=`：按最近观看倒序返回历史列表。
+- `GET /api/history?limit=&offset=`：按最近观看倒序返回历史列表（`limit` 范围 1–200，`offset` ≥ 0）。
+
+> The 200-row cap is enforced per write and is eventually-consistent under concurrent inserts for the same user (assumes a single logical writer per user at MVP scale); it never produces duplicates or unbounded growth.
 
 > 临时用 `X-User-Id` 请求头标识用户，后续由真实鉴权替换。运行测试需 `TEST_DATABASE_URL`，详见计划文档 Prerequisites。
