@@ -44,3 +44,23 @@ async def record_watch(
             )
             if row["inserted"]:
                 await conn.execute(_TRIM_SQL, user_id, HISTORY_CAP)
+
+
+_LIST_SQL = """
+SELECT id, video_id, title, channel, watched_at, last_position
+FROM history_records
+WHERE user_id = $1
+ORDER BY watched_at DESC, id DESC
+LIMIT $2 OFFSET $3
+"""
+
+
+async def list_history(
+    pool: asyncpg.Pool,
+    user_id,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[dict]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(_LIST_SQL, user_id, limit, offset)
+    return [dict(r) for r in rows]

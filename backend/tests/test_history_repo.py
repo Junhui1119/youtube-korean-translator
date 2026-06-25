@@ -57,3 +57,32 @@ async def test_record_watch_caps_at_200_dropping_oldest(pool, user_id):
         )
     assert oldest is False
     assert newest is True
+
+
+async def test_list_history_orders_newest_first(pool, user_id):
+    await history_repo.record_watch(pool, user_id, "vid00000001", "第一个", None, 0)
+    await history_repo.record_watch(pool, user_id, "vid00000002", "第二个", None, 0)
+    await history_repo.record_watch(pool, user_id, "vid00000003", "第三个", None, 0)
+    items = await history_repo.list_history(pool, user_id)
+    assert [it["video_id"] for it in items] == [
+        "vid00000003",
+        "vid00000002",
+        "vid00000001",
+    ]
+    assert set(items[0].keys()) == {
+        "id",
+        "video_id",
+        "title",
+        "channel",
+        "watched_at",
+        "last_position",
+    }
+
+
+async def test_list_history_pagination(pool, user_id):
+    for i in range(5):
+        await history_repo.record_watch(pool, user_id, f"vid{i:08d}", f"T{i}", None, 0)
+    page = await history_repo.list_history(pool, user_id, limit=2, offset=2)
+    assert len(page) == 2
+    # 全列表 newest-first 为 vid04,vid03,vid02,vid01,vid00 → offset2/limit2 → vid02,vid01
+    assert [it["video_id"] for it in page] == ["vid00000002", "vid00000001"]
