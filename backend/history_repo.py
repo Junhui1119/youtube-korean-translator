@@ -1,4 +1,5 @@
 import asyncpg
+import uuid
 
 HISTORY_CAP = 200
 
@@ -16,20 +17,21 @@ RETURNING (xmax = 0) AS inserted
 # (xmax = 0) 为 Postgres 惯用法：INSERT 时为 true，DO UPDATE 时为 false。
 
 _TRIM_SQL = """
-DELETE FROM history_records
-WHERE user_id = $1
-  AND id NOT IN (
+WITH keep AS (
     SELECT id FROM history_records
     WHERE user_id = $1
     ORDER BY watched_at DESC, id DESC
     LIMIT $2
-  )
+)
+DELETE FROM history_records
+WHERE user_id = $1
+  AND id NOT IN (SELECT id FROM keep)
 """
 
 
 async def record_watch(
     pool: asyncpg.Pool,
-    user_id,
+    user_id: uuid.UUID,
     video_id: str,
     title: str,
     channel: str | None = None,
