@@ -95,16 +95,70 @@ if (clearTimer !== null) {
 
 ---
 
-## 当前状态
+## 当前状态（第一阶段）
 
 - 所有改动已测试通过（用户在 Chrome 中验证）
-- **尚未 commit**
-- 翻译正确性 review 进行中（用户继续测试中）
+- 已 commit：`656e961 feat(extension): popup status, DeepL engine, UX polish`
+
+---
+
+### 5. 切换翻译引擎为 DeepL
+
+**背景**：Google 翻译质量有限，DeepL 免费版（50 万字/月）质量明显更好。
+
+**实现**：
+- `src/translate.js`：有 key 走 DeepL，无 key 走 Google，两者共存可随时切换
+- `background.js`：缓存 `deeplApiKey`，切换引擎时自动清空翻译缓存
+- `popup.html/js`：加 API Key 输入框 + 保存按钮，底部显示当前引擎
+- `manifest.json`：加 `https://api-free.deepl.com/*` host 权限
+
+**效果**：用户测试后确认翻译准确度提升明显。
+
+---
+
+### 6. Code Review 问题修复
+
+| 问题 | 修复 |
+|------|------|
+| `translationCache` 无上限，长时间使用持续增长 | 加 200 条 FIFO 上限，超限时淘汰最旧条目 |
+| 后端 `RecordWatchRequest` 无输入校验 | `video_id` 格式/长度、`title` 非空、`last_position >= 0`、`channel` 长度限制 |
+
+已 commit：`8933ce8 fix: cap translation cache; add backend input validation`
+
+---
+
+### 7. 实现 8 个 v1 GitHub Issues
+
+已 commit：`8e7a603 feat(v1): glossary correction, SPA navigation, no-CC guidance, 429 backoff, tests, README`
+
+| Issue | 内容 | 关键文件 |
+|-------|------|---------|
+| #1 术语库校正（p0） | 占位符法：翻译前把韩语术语替换为 `<ykt0/>`，翻译后还原 | `src/glossary.js`（新建） |
+| #2 无字幕引导（p1） | 从未检测到 CC 时 5 秒后显示"请先点 CC 按钮 → 选择 Korean" | `content.js` |
+| #3 SPA 切换视频（p1） | 监听 `yt-navigate-finish`，重置所有状态，无需重建 Observer | `content.js` |
+| #4 翻译失败可见状态（p1） | `renderText` 加 state 枚举，失败显示 `⚠ 原文` + 红色背景 | `content.js` `styles.css` |
+| #5 429 退避重试（p1） | Google 遇 429/5xx 自动重试 3 次（1s→2s→4s），非重试错误直接抛 | `src/translate.js` |
+| #6 README 更新（p2） | 重写，含 DeepL 配置、术语库说明、后端启动、Roadmap | `README.md` |
+| #7 单元测试（p2） | 新增 glossary（7 个）、cache（2 个）、translate 更新，**15 个全绿** | `tests/` |
+| #8 Store 图标（p1） | 图标生成器 HTML + manifest 加 icons 字段 | `scripts/generate-icons.html` |
+
+---
+
+## 所有 Commits
+
+```
+656e961  feat(extension): popup status, DeepL engine, UX polish
+8933ce8  fix: cap translation cache at 200 entries; add backend input validation
+2e99a72  docs: update roadmap with ASR phases and v1 completed items
+8e7a603  feat(v1): glossary correction, SPA navigation, no-CC guidance, 429 backoff, tests, README
+```
 
 ---
 
 ## 待做
 
-- [ ] 翻译正确性 review（术语准确度、语义通顺度）
-- [ ] git commit（`popup.html` `popup.js` `content.js` `background.js`）
-- [ ] 术语库 `glossary/ko-zh-game-terms.csv` 按实际测试结果补充
+- [ ] 生成图标：用 Chrome 打开 `scripts/generate-icons.html`，下载三个 PNG 到 `icons/` 目录
+- [ ] 重新加载扩展，验证术语库校正生效（如 `한타` → "团战"）
+- [ ] 验证 SPA 切换视频、无字幕引导、错误状态在 Chrome 中正常工作
+- [ ] 扩充 `glossary/ko-zh-game-terms.csv`（按实际测试结果补充目标主播常用术语）
+- [ ] 后端部署（FastAPI + PostgreSQL，Render 或 Railway）
