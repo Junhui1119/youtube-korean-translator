@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 import db
 import history_repo
@@ -25,10 +25,17 @@ def hello():
 
 
 class RecordWatchRequest(BaseModel):
-    video_id: str
-    title: str
-    channel: str | None = None
-    last_position: int = 0
+    video_id: str = Field(min_length=1, max_length=11)
+    title: str = Field(min_length=1, max_length=500)
+    channel: str | None = Field(default=None, max_length=200)
+    last_position: int = Field(default=0, ge=0)
+
+    @field_validator("video_id")
+    @classmethod
+    def video_id_alphanumeric(cls, v: str) -> str:
+        if not v.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("video_id must be alphanumeric with - and _ only")
+        return v
 
 
 class HistoryItem(BaseModel):

@@ -1,7 +1,15 @@
 import { translateText } from "./src/translate.js";
 
 const DEFAULT_ENABLED = true;
+const CACHE_MAX = 200;
 const translationCache = new Map();
+
+function cacheSet(key, value) {
+  if (translationCache.size >= CACHE_MAX) {
+    translationCache.delete(translationCache.keys().next().value);
+  }
+  translationCache.set(key, value);
+}
 
 let cachedEnabled = DEFAULT_ENABLED;
 let cachedApiKey = "";
@@ -48,7 +56,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         const translatedText = await translateText(normalizedText, cachedApiKey);
-        translationCache.set(cacheKey, translatedText);
+        cacheSet(cacheKey, translatedText);
         sendResponse({ ok: true, text: translatedText });
       } catch (error) {
         sendResponse({ ok: false, text, error: error.message });
