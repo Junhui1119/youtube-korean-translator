@@ -20,9 +20,88 @@
         font-size: 14px;
       }
 
-      input {
+      input[type="checkbox"] {
         width: 18px;
         height: 18px;
+      }
+
+      .status {
+        margin: 10px 0 0;
+        font-size: 12px;
+        color: #666;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .status::before {
+        content: "";
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: #ccc;
+      }
+
+      .status.on::before {
+        background: #22c55e;
+      }
+
+      .divider {
+        margin: 12px 0;
+        border: none;
+        border-top: 1px solid #eee;
+      }
+
+      .key-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .key-label {
+        font-size: 11px;
+        color: #999;
+        margin: 0 0 4px;
+      }
+
+      input[type="text"] {
+        flex: 1;
+        font-size: 11px;
+        padding: 4px 6px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        outline: none;
+        min-width: 0;
+      }
+
+      input[type="text"]:focus {
+        border-color: #888;
+      }
+
+      .save-btn {
+        font-size: 11px;
+        padding: 4px 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: #f5f5f5;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .save-btn:hover {
+        background: #e8e8e8;
+      }
+
+      .engine-tag {
+        font-size: 10px;
+        color: #999;
+        margin: 4px 0 0;
+      }
+
+      .engine-tag.deepl {
+        color: #0f62e6;
       }
     </style>
   </head>
@@ -31,6 +110,17 @@
       <span>显示中文字幕</span>
       <input id="enabled" type="checkbox" />
     </label>
+    <p id="status" class="status">翻译已关闭</p>
+
+    <hr class="divider" />
+
+    <p class="key-label">DeepL API Key（留空则用 Google 翻译）</p>
+    <div class="key-row">
+      <input id="apiKey" type="text" placeholder="粘贴你的 DeepL key" />
+      <button id="saveKey" class="save-btn">保存</button>
+    </div>
+    <p id="engineTag" class="engine-tag"></p>
+
     <script src="popup.js" type="module"></script>
   </body>
 </html>

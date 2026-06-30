@@ -3,6 +3,7 @@ const OVERLAY_ID = "ykt-translation-overlay";
 
 let lastCaptionText = "";
 let debounceTimer = null;
+let clearTimer = null;
 let enabled = true;
 let observerStarted = false;
 
@@ -30,7 +31,8 @@ function currentCaptionText() {
   return [...document.querySelectorAll(CAPTION_SELECTOR)]
     .map((node) => node.textContent.trim())
     .filter(Boolean)
-    .join(" ");
+    .join(" ")
+    .replace(/>>+\s*/g, "");
 }
 
 function requestTranslation(text) {
@@ -56,11 +58,28 @@ function scheduleCaptionCheck() {
     if (!enabled) return;
 
     const text = currentCaptionText();
-    if (!text || text === lastCaptionText) return;
+
+    if (!text) {
+      if (clearTimer === null) {
+        clearTimer = setTimeout(() => {
+          renderText("");
+          lastCaptionText = "";
+          clearTimer = null;
+        }, 1000);
+      }
+      return;
+    }
+
+    if (clearTimer !== null) {
+      clearTimeout(clearTimer);
+      clearTimer = null;
+    }
+
+    if (text === lastCaptionText) return;
 
     lastCaptionText = text;
     requestTranslation(text);
-  }, 250);
+  }, 100);
 }
 
 function startObserver() {
@@ -92,6 +111,8 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   enabled = changes.enabled.newValue !== false;
   if (!enabled) {
     clearTimeout(debounceTimer);
+    clearTimeout(clearTimer);
+    clearTimer = null;
     renderText("");
   } else {
     startObserver();

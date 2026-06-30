@@ -3,23 +3,33 @@ import { translateText } from "./src/translate.js";
 const DEFAULT_ENABLED = true;
 const translationCache = new Map();
 
-async function isEnabled() {
-  const result = await chrome.storage.local.get({ enabled: DEFAULT_ENABLED });
-  return result.enabled;
-}
+let cachedEnabled = DEFAULT_ENABLED;
+let cachedApiKey = "";
+
+chrome.storage.local.get({ enabled: DEFAULT_ENABLED, deeplApiKey: "" }, (result) => {
+  cachedEnabled = result.enabled;
+  cachedApiKey = result.deeplApiKey;
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local") return;
+  if (changes.enabled !== undefined) cachedEnabled = changes.enabled.newValue;
+  if (changes.deeplApiKey !== undefined) {
+    cachedApiKey = changes.deeplApiKey.newValue;
+    translationCache.clear();
+  }
+});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "GET_ENABLED") {
-    isEnabled()
-      .then((enabled) => sendResponse({ enabled }))
-      .catch((error) => sendResponse({ enabled: DEFAULT_ENABLED, error: error.message }));
-    return true;
+    sendResponse({ enabled: cachedEnabled });
+    return false;
   }
 
   if (message?.type === "TRANSLATE_TEXT") {
     (async () => {
       const text = typeof message.text === "string" ? message.text : "";
-      if (!(await isEnabled())) {
+      if (!cachedEnabled) {
         sendResponse({ ok: false, text, error: "Extension disabled" });
         return;
       }
@@ -31,13 +41,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
 
-        if (translationCache.has(normalizedText)) {
-          sendResponse({ ok: true, text: translationCache.get(normalizedText) });
+        const cacheKey = `${cachedApiKey ? "deepl" : "google"}:${normalizedText}`;
+        if (translationCache.has(cacheKey)) {
+          sendResponse({ ok: true, text: translationCache.get(cacheKey) });
           return;
         }
 
-        const translatedText = await translateText(normalizedText);
-        translationCache.set(normalizedText, translatedText);
+        const translatedText = await translateText(normalizedText, cachedApiKey);
+        translationCache.set(cacheKey, translatedText);
         sendResponse({ ok: true, text: translatedText });
       } catch (error) {
         sendResponse({ ok: false, text, error: error.message });

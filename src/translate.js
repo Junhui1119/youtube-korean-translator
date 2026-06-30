@@ -1,42 +1,63 @@
-export function buildTranslateUrl(text, source = "ko", target = "zh-CN") {
-  const params = new URLSearchParams({
-    client: "gtx",
-    sl: source,
-    tl: target,
-    dt: "t",
-    q: text,
-  });
-  return `https://translate.googleapis.com/translate_a/single?${params.toString()}`;
-}
-
-export function parseTranslateResponse(data) {
-  if (!Array.isArray(data) || !Array.isArray(data[0])) {
-    throw new Error("Invalid translate response");
-  }
-
-  const translatedText = data[0]
-    .map((segment) => {
-      if (!Array.isArray(segment)) return "";
-      return typeof segment[0] === "string" ? segment[0] : "";
-    })
-    .filter(Boolean)
-    .join("");
-
-  if (!translatedText) {
-    throw new Error("Translate response did not contain text");
-  }
-
-  return translatedText;
-}
-
-export async function translateText(text, fetchFn = fetch, source = "ko", target = "zh-CN") {
+export async function translateText(text, apiKey, fetchFn = fetch) {
   const normalizedText = text.trim();
   if (!normalizedText) return "";
 
-  const response = await fetchFn(buildTranslateUrl(normalizedText, source, target));
+  if (apiKey) {
+    return translateDeepL(normalizedText, apiKey, fetchFn);
+  }
+  return translateGoogle(normalizedText, fetchFn);
+}
+
+async function translateDeepL(text, apiKey, fetchFn) {
+  const response = await fetchFn("https://api-free.deepl.com/v2/translate", {
+    method: "POST",
+    headers: {
+      Authorization: `DeepL-Auth-Key ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text: [text],
+      source_lang: "KO",
+      target_lang: "ZH-HANS",
+    }),
+  });
+
   if (!response.ok) {
-    throw new Error(`Translate request failed: HTTP ${response.status}`);
+    throw new Error(`DeepL request failed: HTTP ${response.status}`);
   }
 
-  return parseTranslateResponse(await response.json());
+  const data = await response.json();
+  const translated = data?.translations?.[0]?.text;
+  if (!translated) throw new Error("DeepL response did not contain text");
+  return translated;
+}
+
+async function translateGoogle(text, fetchFn) {
+  const params = new URLSearchParams({
+    client: "gtx",
+    sl: "ko",
+    tl: "zh-CN",
+    dt: "t",
+    q: text,
+  });
+  const response = await fetchFn(
+    `https://translate.googleapis.com/translate_a/single?${params.toString()}`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Google Translate request failed: HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!Array.isArray(data) || !Array.isArray(data[0])) {
+    throw new Error("Invalid Google Translate response");
+  }
+
+  const translated = data[0]
+    .map((seg) => (Array.isArray(seg) && typeof seg[0] === "string" ? seg[0] : ""))
+    .filter(Boolean)
+    .join("");
+
+  if (!translated) throw new Error("Google Translate response did not contain text");
+  return translated;
 }
