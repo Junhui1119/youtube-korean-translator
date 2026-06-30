@@ -19,6 +19,13 @@
   background: rgba(128, 34, 34, 0.82);
 }
 
+#ykt-translation-overlay[data-state="guidance"] {
+  background: rgba(0, 0, 0, 0.6);
+  font-size: 16px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.75);
+}
+
 @media (max-width: 720px) {
   #ykt-translation-overlay {
     bottom: 14%;

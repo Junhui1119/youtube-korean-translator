@@ -1,8 +1,13 @@
 import { translateText } from "./src/translate.js";
+import { loadGlossaryMap } from "./src/glossary.js";
 
 const DEFAULT_ENABLED = true;
 const CACHE_MAX = 200;
 const translationCache = new Map();
+
+let cachedEnabled = DEFAULT_ENABLED;
+let cachedApiKey = "";
+const glossaryMapPromise = loadGlossaryMap();
 
 function cacheSet(key, value) {
   if (translationCache.size >= CACHE_MAX) {
@@ -10,9 +15,6 @@ function cacheSet(key, value) {
   }
   translationCache.set(key, value);
 }
-
-let cachedEnabled = DEFAULT_ENABLED;
-let cachedApiKey = "";
 
 chrome.storage.local.get({ enabled: DEFAULT_ENABLED, deeplApiKey: "" }, (result) => {
   cachedEnabled = result.enabled;
@@ -55,7 +57,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
 
-        const translatedText = await translateText(normalizedText, cachedApiKey);
+        const glossaryMap = await glossaryMapPromise;
+        const translatedText = await translateText(normalizedText, cachedApiKey, glossaryMap);
         cacheSet(cacheKey, translatedText);
         sendResponse({ ok: true, text: translatedText });
       } catch (error) {

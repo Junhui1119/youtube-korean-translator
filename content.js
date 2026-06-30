@@ -4,6 +4,8 @@ const OVERLAY_ID = "ykt-translation-overlay";
 let lastCaptionText = "";
 let debounceTimer = null;
 let clearTimer = null;
+let guidanceTimer = null;
+let hasCaptionBeenDetected = false;
 let enabled = true;
 let observerStarted = false;
 
@@ -20,10 +22,10 @@ function getOverlay() {
   return overlay;
 }
 
-function renderText(text, isError = false) {
+function renderText(text, state = "translated") {
   const overlay = getOverlay();
-  overlay.textContent = text;
-  overlay.dataset.state = isError ? "error" : "translated";
+  overlay.textContent = state === "error" ? `⚠ ${text}` : text;
+  overlay.dataset.state = state;
   overlay.hidden = !text;
 }
 
@@ -42,12 +44,27 @@ function requestTranslation(text) {
     if (!enabled) return;
 
     if (chrome.runtime.lastError) {
-      renderText(text, true);
+      renderText(text, "error");
       return;
     }
 
-    renderText(response?.text || text, !response?.ok);
+    renderText(response?.text || text, response?.ok ? "translated" : "error");
   });
+}
+
+function scheduleGuidance() {
+  if (guidanceTimer !== null || hasCaptionBeenDetected) return;
+  guidanceTimer = setTimeout(() => {
+    guidanceTimer = null;
+    if (!hasCaptionBeenDetected && enabled) {
+      renderText("请先点播放器 CC 按钮 → 选择 Korean", "guidance");
+    }
+  }, 5000);
+}
+
+function cancelGuidance() {
+  clearTimeout(guidanceTimer);
+  guidanceTimer = null;
 }
 
 function scheduleCaptionCheck() {
@@ -60,6 +77,7 @@ function scheduleCaptionCheck() {
     const text = currentCaptionText();
 
     if (!text) {
+      scheduleGuidance();
       if (clearTimer === null) {
         clearTimer = setTimeout(() => {
           renderText("");
@@ -69,6 +87,9 @@ function scheduleCaptionCheck() {
       }
       return;
     }
+
+    hasCaptionBeenDetected = true;
+    cancelGuidance();
 
     if (clearTimer !== null) {
       clearTimeout(clearTimer);
@@ -90,19 +111,30 @@ function startObserver() {
 
   observerStarted = true;
   const observer = new MutationObserver(scheduleCaptionCheck);
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    characterData: true,
-  });
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
   scheduleCaptionCheck();
 }
 
+function resetPageState() {
+  clearTimeout(debounceTimer);
+  clearTimeout(clearTimer);
+  clearTimer = null;
+  cancelGuidance();
+  hasCaptionBeenDetected = false;
+  lastCaptionText = "";
+  renderText("");
+}
+
+// YouTube SPA navigation
+window.addEventListener("yt-navigate-finish", () => {
+  if (!enabled) return;
+  resetPageState();
+  scheduleCaptionCheck();
+});
+
 chrome.runtime.sendMessage({ type: "GET_ENABLED" }, (response) => {
   enabled = chrome.runtime.lastError || response?.enabled !== false;
-  if (enabled) {
-    startObserver();
-  }
+  if (enabled) startObserver();
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -113,6 +145,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     clearTimeout(debounceTimer);
     clearTimeout(clearTimer);
     clearTimer = null;
+    cancelGuidance();
     renderText("");
   } else {
     startObserver();
