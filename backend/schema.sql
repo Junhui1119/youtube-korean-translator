@@ -3,10 +3,12 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- 最小 users 表：仅满足外键约束与测试。完整账号体系（密码/Token）由独立的鉴权计划实现。
 CREATE TABLE IF NOT EXISTS users (
-  id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  email      text        UNIQUE NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
+  id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  email         text        UNIQUE NOT NULL,
+  password_hash text        NOT NULL DEFAULT '',
+  created_at    timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS password_hash text NOT NULL DEFAULT '';
 
 -- 翻译历史：只存视频级元数据，绝不存字幕正文。
 CREATE TABLE IF NOT EXISTS history_records (
