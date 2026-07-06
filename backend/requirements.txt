@@ -6,3 +6,4 @@ python-dotenv>=1,<2
 PyJWT>=2.8.0,<3
 passlib[bcrypt]>=1.7.4,<2
 bcrypt>=4.0.0,<5
+deepgram-sdk>=3.5,<4

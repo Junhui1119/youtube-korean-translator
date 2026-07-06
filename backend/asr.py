@@ -1,0 +1,85 @@
+import os
+
+from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents
+from fastapi import APIRouter, Query, WebSocket
+
+import auth_service
+import translate_service
+
+router = APIRouter()
+
+
+@router.websocket("/ws/asr")
+async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
+    await websocket.accept()
+
+    try:
+        auth_service.decode_token(token)
+    except ValueError:
+        await websocket.close(code=4001)
+        return
+
+    deepgram_api_key = os.environ.get("DEEPGRAM_API_KEY", "")
+    if not deepgram_api_key:
+        await websocket.close(code=4002)
+        return
+
+    dg_client = DeepgramClient(deepgram_api_key)
+    dg_conn = dg_client.listen.asynclive.v("1")
+
+    async def on_transcript(self, result, **kwargs):
+        try:
+            alt = result.channel.alternatives[0]
+            text = alt.transcript
+            if not text:
+                return
+            if not result.is_final:
+                await websocket.send_json({"type": "interim", "text": text})
+            else:
+                deepl_key = os.environ.get("DEEPL_API_KEY", "")
+                chinese = ""
+                if deepl_key:
+                    try:
+                        chinese = await translate_service.translate_deepl(text, deepl_key)
+                    except Exception:
+                        pass
+                await websocket.send_json(
+                    {"type": "final", "korean": text, "chinese": chinese}
+                )
+        except Exception:
+            pass
+
+    async def on_error(self, error, **kwargs):
+        try:
+            await websocket.send_json({"type": "error", "message": str(error)})
+        except Exception:
+            pass
+
+    dg_conn.on(LiveTranscriptionEvents.Transcript, on_transcript)
+    dg_conn.on(LiveTranscriptionEvents.Error, on_error)
+
+    options = LiveOptions(
+        model="nova-2",
+        language="ko",
+        encoding="linear16",
+        sample_rate=16000,
+        channels=1,
+        interim_results=True,
+        endpointing=300,
+    )
+
+    started = await dg_conn.start(options)
+    if not started:
+        await websocket.send_json({"type": "error", "message": "Deepgram connection failed"})
+        await websocket.close()
+        return
+
+    await websocket.send_json({"type": "ready"})
+
+    try:
+        async for chunk in websocket.iter_bytes():
+            await dg_conn.send(chunk)
+    except Exception:
+        pass
+    finally:
+        await dg_conn.finish()

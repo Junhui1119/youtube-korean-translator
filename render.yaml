@@ -16,3 +16,5 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
