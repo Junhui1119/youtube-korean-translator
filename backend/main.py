@@ -31,7 +31,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["POST", "GET", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-User-Token"],
 )
 
 
@@ -101,7 +101,9 @@ class TranslateResponse(BaseModel):
     latency_ms: int
 
 
-def verify_jwt(authorization: str = Header(...)) -> uuid.UUID:
+def verify_jwt(authorization: str | None = Header(default=None)) -> uuid.UUID:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="invalid token")
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail="invalid token")
@@ -163,8 +165,8 @@ async def login(body: AuthRequest) -> AuthResponse:
         row = await conn.fetchrow(
             "SELECT id, password_hash FROM users WHERE email = $1", body.email
         )
-    stored_hash = row["password_hash"] if row else _DUMMY_HASH
-    if not auth_service.verify_password(body.password, stored_hash) or not row:
+    stored_hash = row["password_hash"] if row and row["password_hash"] else _DUMMY_HASH
+    if not row or not auth_service.verify_password(body.password, stored_hash):
         raise HTTPException(status_code=401, detail="invalid email or password")
     token = auth_service.create_token(row["id"])
     return AuthResponse(token=token, user_id=str(row["id"]), email=body.email)

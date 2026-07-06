@@ -109,6 +109,20 @@ async def test_history_invalid_jwt_returns_401(client):
     assert resp.status_code == 401
 
 
-async def test_history_missing_auth_returns_422(client):
+async def test_history_missing_auth_returns_401(client):
     resp = await client.get("/api/history")
-    assert resp.status_code == 422
+    assert resp.status_code == 401
+
+
+async def test_login_empty_password_hash_returns_401(client):
+    # Simulate a legacy user inserted without going through /register
+    async with db._pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO users (email, password_hash) VALUES ($1, '')",
+            "legacy@example.com",
+        )
+    resp = await client.post(
+        "/api/auth/login",
+        json={"email": "legacy@example.com", "password": "anything"},
+    )
+    assert resp.status_code == 401

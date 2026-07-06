@@ -13,6 +13,7 @@ let cachedEnabled = DEFAULT_ENABLED;
 let cachedApiKey = "";
 let cachedBackendUrl = "";
 let cachedBackendToken = "";
+let cachedJwt = "";
 let backendDegraded = false; // true 后不再重试后端，直到设置变更
 const glossaryMapPromise = loadGlossaryMap();
 
@@ -25,12 +26,13 @@ function cacheSet(key, value) {
 
 const settingsReady = new Promise((resolve) => {
   chrome.storage.local.get(
-    { enabled: DEFAULT_ENABLED, deeplApiKey: "", backendUrl: "", backendToken: "" },
+    { enabled: DEFAULT_ENABLED, deeplApiKey: "", backendUrl: "", backendToken: "", jwt: "" },
     (result) => {
       cachedEnabled = result.enabled;
       cachedApiKey = result.deeplApiKey;
       cachedBackendUrl = result.backendUrl;
       cachedBackendToken = result.backendToken;
+      cachedJwt = result.jwt;
       resolve();
     }
   );
@@ -62,6 +64,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     chrome.storage.local.set({ backendDegraded: false });
     translationCache.clear();
   }
+  if (changes.jwt !== undefined) {
+    cachedJwt = changes.jwt.newValue ?? "";
+  }
 });
 
 async function translateViaBackend(text) {
@@ -73,6 +78,7 @@ async function translateViaBackend(text) {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${cachedBackendToken}`,
+        "X-User-Token": cachedJwt,
       },
       body: JSON.stringify({ text, engine: "deepl" }),
       signal: controller.signal,
