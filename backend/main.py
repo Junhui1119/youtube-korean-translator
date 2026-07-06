@@ -1,3 +1,4 @@
+import hmac
 import os
 import time
 import uuid
@@ -6,6 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 import db
@@ -22,6 +24,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["POST", "GET", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 
 @app.get("/api/hello")
@@ -57,7 +66,7 @@ def verify_translate_token(authorization: str = Header(...)) -> None:
     if not expected:
         raise HTTPException(status_code=500, detail="TRANSLATE_TOKEN not configured")
     scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or token != expected:
+    if scheme.lower() != "bearer" or not hmac.compare_digest(token, expected):
         raise HTTPException(status_code=401, detail="invalid token")
 
 

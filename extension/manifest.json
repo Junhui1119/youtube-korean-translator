@@ -14,6 +14,7 @@
     "https://translate.googleapis.com/*",
     "https://api-free.deepl.com/*"
   ],
+  "optional_host_permissions": ["*://*/*"],
   "background": {
     "service_worker": "background.js",
     "type": "module"

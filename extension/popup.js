@@ -42,10 +42,10 @@ function setBackendTag(url) {
 }
 
 chrome.storage.local.get(
-  { enabled: true, deeplApiKey: "", backendUrl: "", backendToken: "" },
-  ({ enabled, deeplApiKey, backendUrl, backendToken }) => {
+  { enabled: true, deeplApiKey: "", backendUrl: "", backendToken: "", backendDegraded: false },
+  ({ enabled, deeplApiKey, backendUrl, backendToken, backendDegraded: degraded }) => {
     enabledInput.checked = enabled;
-    setStatus(enabled);
+    setStatus(enabled, degraded);
     apiKeyInput.value = deeplApiKey;
     setEngineTag(deeplApiKey);
     backendUrlInput.value = backendUrl;
@@ -68,9 +68,29 @@ saveKeyBtn.addEventListener("click", () => {
   setTimeout(() => (saveKeyBtn.textContent = "保存"), 1500);
 });
 
-saveBackendBtn.addEventListener("click", () => {
+saveBackendBtn.addEventListener("click", async () => {
   const url = backendUrlInput.value.trim();
   const token = backendTokenInput.value.trim();
+
+  if (url) {
+    let origin;
+    try {
+      origin = new URL(url).origin + "/*";
+    } catch {
+      saveBackendBtn.textContent = "URL 无效";
+      setTimeout(() => (saveBackendBtn.textContent = "保存"), 1500);
+      return;
+    }
+    const granted = await new Promise((resolve) => {
+      chrome.permissions.request({ origins: [origin] }, resolve);
+    });
+    if (!granted) {
+      saveBackendBtn.textContent = "权限被拒绝";
+      setTimeout(() => (saveBackendBtn.textContent = "保存"), 1500);
+      return;
+    }
+  }
+
   chrome.storage.local.set({ backendUrl: url, backendToken: token });
   setBackendTag(url);
   saveBackendBtn.textContent = "已保存";

@@ -38,7 +38,14 @@ const settingsReady = new Promise((resolve) => {
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
-  if (changes.enabled !== undefined) cachedEnabled = changes.enabled.newValue;
+  if (changes.enabled !== undefined) {
+    cachedEnabled = changes.enabled.newValue;
+    if (changes.enabled.newValue === true) {
+      backendDegraded = false;
+      chrome.storage.local.set({ backendDegraded: false });
+      translationCache.clear();
+    }
+  }
   if (changes.deeplApiKey !== undefined) {
     cachedApiKey = changes.deeplApiKey.newValue;
     translationCache.clear();
@@ -46,11 +53,13 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes.backendUrl !== undefined) {
     cachedBackendUrl = changes.backendUrl.newValue;
     backendDegraded = false; // 设置变更后重置降级状态
+    chrome.storage.local.set({ backendDegraded: false });
     translationCache.clear();
   }
   if (changes.backendToken !== undefined) {
     cachedBackendToken = changes.backendToken.newValue;
     backendDegraded = false;
+    chrome.storage.local.set({ backendDegraded: false });
     translationCache.clear();
   }
 });
@@ -124,7 +133,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           } catch (_backendError) {
             // 降级：标记后不再重试，通知 popup 变黄灯，回退直连 Google
             backendDegraded = true;
-            chrome.runtime.sendMessage({ type: "BACKEND_DEGRADED" });
+            chrome.storage.local.set({ backendDegraded: true });
+            chrome.runtime.sendMessage({ type: "BACKEND_DEGRADED" }).catch(() => {});
             translatedText = await translateText(normalizedText, null, glossaryMap);
           }
         } else {
