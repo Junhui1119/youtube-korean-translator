@@ -12,7 +12,7 @@
 |------|------|
 | 实时翻译 | 监听 YouTube CC 字幕 DOM 变化，自动翻译并叠加中文 |
 | 双引擎 | 默认用 Google 翻译（免费）；填入 DeepL API Key 后切换为 DeepL（质量更好） |
-| 术语校正 | 机翻后用 `glossary/ko-zh-game-terms.csv` 校正游戏术语、人名、口头禅 |
+| 术语校正 | 机翻后用 `extension/glossary/ko-zh-game-terms.csv` 校正游戏术语、人名、口头禅 |
 | 开关 + 状态 | Popup 一键开关，绿点/灰点实时显示插件是否工作 |
 | 无字幕引导 | 检测到没有 CC 字幕时，5 秒后提示用户开启韩语 CC |
 | 切换视频 | YouTube 站内切视频（SPA）后自动重置，无需刷新页面 |
@@ -39,7 +39,7 @@ cd youtube-korean-translator
 
 1. 打开 Chrome `chrome://extensions/`
 2. 开启右上角 **Developer mode**
-3. 点击 **Load unpacked** → 选择本仓库目录
+3. 点击 **Load unpacked** → 选择仓库下的 `extension/` 目录
 4. 打开任意 YouTube 视频，开启韩语 CC，点工具栏插件图标
 
 ### 2. 配置 DeepL（可选，翻译质量更好）
@@ -53,12 +53,12 @@ cd youtube-korean-translator
 ### 3. 运行测试
 
 ```bash
-npm test
+cd extension && npm test
 ```
 
 ### 4. 扩充术语库
 
-编辑 `glossary/ko-zh-game-terms.csv`，增加词条，重新加载扩展即生效，无需改代码。
+编辑 `extension/glossary/ko-zh-game-terms.csv`，增加词条，重新加载扩展即生效，无需改代码。
 
 格式：`korean,chinese,category,note`
 
