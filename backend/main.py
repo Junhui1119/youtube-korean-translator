@@ -6,10 +6,12 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Literal
 
+import asyncpg
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
+import auth_service
 import db
 import history_repo
 from middleware import log_translate_request
@@ -61,6 +63,24 @@ class HistoryItem(BaseModel):
     last_position: int
 
 
+class AuthRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def email_must_contain_at(cls, v: str) -> str:
+        if "@" not in v:
+            raise ValueError("invalid email format")
+        return v.lower().strip()
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user_id: str
+    email: str
+
+
 def verify_translate_token(authorization: str = Header(...)) -> None:
     expected = os.environ.get("TRANSLATE_TOKEN", "")
     if not expected:
@@ -81,18 +101,20 @@ class TranslateResponse(BaseModel):
     latency_ms: int
 
 
-# 临时鉴权：用 X-User-Id 头标识用户。**待替换为真实 JWT 鉴权（独立的账号体系计划）。**
-def get_current_user_id(x_user_id: str = Header(...)) -> uuid.UUID:
+def verify_jwt(authorization: str = Header(...)) -> uuid.UUID:
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="invalid token")
     try:
-        return uuid.UUID(x_user_id)
+        return auth_service.decode_token(token)
     except ValueError:
-        raise HTTPException(status_code=400, detail="invalid user id")
+        raise HTTPException(status_code=401, detail="invalid token")
 
 
 @app.post("/api/history", status_code=204)
 async def post_history(
     body: RecordWatchRequest,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    user_id: uuid.UUID = Depends(verify_jwt),
 ) -> Response:
     await history_repo.record_watch(
         db.get_pool(),
@@ -107,11 +129,45 @@ async def post_history(
 
 @app.get("/api/history", response_model=list[HistoryItem])
 async def get_history(
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    user_id: uuid.UUID = Depends(verify_jwt),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[dict]:
     return await history_repo.list_history(db.get_pool(), user_id, limit, offset)
+
+
+@app.post("/api/auth/register", response_model=AuthResponse, status_code=201)
+async def register(body: AuthRequest) -> AuthResponse:
+    pool = db.get_pool()
+    password_hash = auth_service.hash_password(body.password)
+    async with pool.acquire() as conn:
+        try:
+            row = await conn.fetchrow(
+                "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id",
+                body.email,
+                password_hash,
+            )
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(status_code=409, detail="email already registered")
+    token = auth_service.create_token(row["id"])
+    return AuthResponse(token=token, user_id=str(row["id"]), email=body.email)
+
+
+_DUMMY_HASH = auth_service.hash_password("dummy-placeholder-never-matches")
+
+
+@app.post("/api/auth/login", response_model=AuthResponse)
+async def login(body: AuthRequest) -> AuthResponse:
+    pool = db.get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, password_hash FROM users WHERE email = $1", body.email
+        )
+    stored_hash = row["password_hash"] if row else _DUMMY_HASH
+    if not auth_service.verify_password(body.password, stored_hash) or not row:
+        raise HTTPException(status_code=401, detail="invalid email or password")
+    token = auth_service.create_token(row["id"])
+    return AuthResponse(token=token, user_id=str(row["id"]), email=body.email)
 
 
 @app.post("/api/translate", response_model=TranslateResponse)

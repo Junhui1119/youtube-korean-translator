@@ -10,7 +10,7 @@ import main
 @pytest_asyncio.fixture
 async def client(pool, user_id):
     db._pool = pool
-    main.app.dependency_overrides[main.get_current_user_id] = lambda: user_id
+    main.app.dependency_overrides[main.verify_jwt] = lambda: user_id
     transport = ASGITransport(app=main.app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -44,13 +44,11 @@ async def test_get_history_pagination_param(client):
     assert len(r.json()) == 1
 
 
-async def test_invalid_user_id_header_rejected():
-    assert db._pool is None
-    # 不覆盖鉴权依赖，传非法 X-User-Id 应 400
+async def test_invalid_jwt_header_rejected():
     transport = ASGITransport(app=main.app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
-        r = await c.get("/api/history", headers={"X-User-Id": "not-a-uuid"})
-    assert r.status_code == 400
+        r = await c.get("/api/history", headers={"Authorization": "Bearer invalid"})
+    assert r.status_code == 401
 
 
 async def test_get_history_rejects_negative_offset(client):
