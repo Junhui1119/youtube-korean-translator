@@ -48,6 +48,10 @@
         background: #22c55e;
       }
 
+      .status.degraded::before {
+        background: #eab308;
+      }
+
       .divider {
         margin: 12px 0;
         border: none;
@@ -120,6 +124,18 @@
       <button id="saveKey" class="save-btn">保存</button>
     </div>
     <p id="engineTag" class="engine-tag"></p>
+
+    <hr class="divider" />
+
+    <p class="key-label">后端设置（可选）</p>
+    <div class="key-row">
+      <input id="backendUrl" type="text" placeholder="https://your-backend.onrender.com" style="font-size:11px;padding:4px 6px;" />
+    </div>
+    <div class="key-row" style="margin-top:6px;">
+      <input id="backendToken" type="text" placeholder="Bearer token" />
+      <button id="saveBackend" class="save-btn">保存</button>
+    </div>
+    <p id="backendTag" class="engine-tag"></p>
 
     <script src="popup.js" type="module"></script>
   </body>
