@@ -1,0 +1,9 @@
+{
+  "name": "youtube-korean-translator",
+  "version": "0.1.0",
+  "description": "Chrome extension that translates Korean YouTube captions to Chinese in real time.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

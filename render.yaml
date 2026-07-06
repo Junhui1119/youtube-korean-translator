@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: ykt-backend
+    runtime: python
+    pythonVersion: "3.11.9"
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash startup.sh
+    healthCheckPath: /api/hello
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DEEPL_API_KEY
+        sync: false
+      - key: TRANSLATE_TOKEN
+        sync: false
+      - key: JWT_SECRET
+        sync: false

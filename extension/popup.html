@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>韩语→中文字幕</title>
+    <style>
+      body {
+        width: 220px;
+        margin: 0;
+        padding: 14px;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 14px;
+      }
+
+      input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+      }
+
+      .status {
+        margin: 10px 0 0;
+        font-size: 12px;
+        color: #666;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .status::before {
+        content: "";
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: #ccc;
+      }
+
+      .status.on::before {
+        background: #22c55e;
+      }
+
+      .status.degraded::before {
+        background: #eab308;
+      }
+
+      .divider {
+        margin: 12px 0;
+        border: none;
+        border-top: 1px solid #eee;
+      }
+
+      .key-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .key-label {
+        font-size: 11px;
+        color: #999;
+        margin: 0 0 4px;
+      }
+
+      input[type="text"] {
+        flex: 1;
+        font-size: 11px;
+        padding: 4px 6px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        outline: none;
+        min-width: 0;
+      }
+
+      input[type="text"]:focus {
+        border-color: #888;
+      }
+
+      .save-btn {
+        font-size: 11px;
+        padding: 4px 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: #f5f5f5;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .save-btn:hover {
+        background: #e8e8e8;
+      }
+
+      .engine-tag {
+        font-size: 10px;
+        color: #999;
+        margin: 4px 0 0;
+      }
+
+      .engine-tag.deepl {
+        color: #0f62e6;
+      }
+
+      input[type="password"] {
+        flex: 1;
+        font-size: 11px;
+        padding: 4px 6px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        outline: none;
+        min-width: 0;
+      }
+
+      input[type="password"]:focus {
+        border-color: #888;
+      }
+
+      .user-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+
+      .user-email {
+        font-size: 11px;
+        color: #666;
+        max-width: 160px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .auth-link {
+        font-size: 11px;
+        color: #0f62e6;
+        text-decoration: none;
+        display: block;
+        text-align: center;
+        margin-top: 8px;
+      }
+
+      .auth-error {
+        font-size: 11px;
+        color: #ef4444;
+        margin: 6px 0 0;
+        min-height: 16px;
+      }
+
+      .history-section {
+        margin-top: 12px;
+      }
+
+      .history-title {
+        font-size: 11px;
+        color: #999;
+        margin: 0 0 6px;
+      }
+
+      .history-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .history-item a {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        padding: 4px 6px;
+        border-radius: 4px;
+        background: #f9f9f9;
+      }
+
+      .history-item a:hover {
+        background: #f0f0f0;
+      }
+
+      .history-item-title {
+        font-size: 11px;
+        color: #222;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 180px;
+        display: block;
+      }
+
+      .history-item-channel {
+        font-size: 10px;
+        color: #999;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 180px;
+        display: block;
+      }
+
+      .history-empty {
+        font-size: 11px;
+        color: #bbb;
+        text-align: center;
+        padding: 6px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Login view: shown when backendUrl set but no valid JWT -->
+    <div id="login-view" hidden>
+      <p id="auth-title" class="key-label">登录账号</p>
+      <div style="margin-bottom:6px;">
+        <input id="auth-email" type="text" placeholder="邮箱" style="width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;border:1px solid #ddd;border-radius:4px;outline:none;" />
+      </div>
+      <div style="margin-bottom:8px;">
+        <input id="auth-password" type="password" placeholder="密码（至少 8 位）" style="width:100%;box-sizing:border-box;" />
+      </div>
+      <button id="auth-submit" class="save-btn" style="width:100%;">登录</button>
+      <p id="auth-error" class="auth-error"></p>
+      <a id="auth-toggle" href="#" class="auth-link">没有账号？注册</a>
+    </div>
+
+    <!-- Main view: shown when logged in or no backend configured -->
+    <div id="main-view" hidden>
+      <div id="user-bar" class="user-bar" hidden>
+        <span id="user-email" class="user-email"></span>
+        <button id="logout-btn" class="save-btn" style="font-size:10px;padding:2px 6px;">退出</button>
+      </div>
+
+      <label>
+        <span>显示中文字幕</span>
+        <input id="enabled" type="checkbox" />
+      </label>
+      <p id="status" class="status">翻译已关闭</p>
+
+      <hr class="divider" />
+
+      <p class="key-label">DeepL API Key（留空则用 Google 翻译）</p>
+      <div class="key-row">
+        <input id="apiKey" type="text" placeholder="粘贴你的 DeepL key" />
+        <button id="saveKey" class="save-btn">保存</button>
+      </div>
+      <p id="engineTag" class="engine-tag"></p>
+
+      <hr class="divider" />
+
+      <p class="key-label">后端设置（可选）</p>
+      <div class="key-row">
+        <input id="backendUrl" type="text" placeholder="https://your-backend.onrender.com" style="font-size:11px;padding:4px 6px;" />
+      </div>
+      <div class="key-row" style="margin-top:6px;">
+        <input id="backendToken" type="text" placeholder="Bearer token" />
+        <button id="saveBackend" class="save-btn">保存</button>
+      </div>
+      <p id="backendTag" class="engine-tag"></p>
+
+      <!-- History section: shown only when logged in -->
+      <div id="history-section" class="history-section" hidden>
+        <hr class="divider" />
+        <p class="history-title">最近观看</p>
+        <ul id="history-list" class="history-list">
+          <li class="history-empty">加载中…</li>
+        </ul>
+      </div>
+    </div>
+
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>
