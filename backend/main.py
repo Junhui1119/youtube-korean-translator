@@ -1,12 +1,17 @@
+import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 
 import db
 import history_repo
+from middleware import log_translate_request
+import translate_service
 
 
 @asynccontextmanager
@@ -47,6 +52,26 @@ class HistoryItem(BaseModel):
     last_position: int
 
 
+def verify_translate_token(authorization: str = Header(...)) -> None:
+    expected = os.environ.get("TRANSLATE_TOKEN", "")
+    if not expected:
+        raise HTTPException(status_code=500, detail="TRANSLATE_TOKEN not configured")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or token != expected:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+
+class TranslateRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=5000)
+    engine: Literal["deepl"] = "deepl"
+
+
+class TranslateResponse(BaseModel):
+    translated: str
+    engine: str
+    latency_ms: int
+
+
 # 临时鉴权：用 X-User-Id 头标识用户。**待替换为真实 JWT 鉴权（独立的账号体系计划）。**
 def get_current_user_id(x_user_id: str = Header(...)) -> uuid.UUID:
     try:
@@ -78,3 +103,24 @@ async def get_history(
     offset: int = Query(default=0, ge=0),
 ) -> list[dict]:
     return await history_repo.list_history(db.get_pool(), user_id, limit, offset)
+
+
+@app.post("/api/translate", response_model=TranslateResponse)
+async def post_translate(
+    body: TranslateRequest,
+    _: None = Depends(verify_translate_token),
+) -> TranslateResponse:
+    deepl_key = os.environ.get("DEEPL_API_KEY", "")
+    if not deepl_key:
+        raise HTTPException(status_code=500, detail="DEEPL_API_KEY not configured")
+
+    t0 = time.monotonic()
+    try:
+        translated = await translate_service.translate_deepl(body.text, deepl_key)
+        latency_ms = round((time.monotonic() - t0) * 1000)
+        log_translate_request(body.engine, len(body.text), latency_ms, "ok")
+        return TranslateResponse(translated=translated, engine=body.engine, latency_ms=latency_ms)
+    except RuntimeError as e:
+        latency_ms = round((time.monotonic() - t0) * 1000)
+        log_translate_request(body.engine, len(body.text), latency_ms, "error", str(e))
+        raise HTTPException(status_code=502, detail=str(e))
