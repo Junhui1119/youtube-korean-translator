@@ -15,6 +15,7 @@ let cachedBackendUrl = "";
 let cachedBackendToken = "";
 let cachedJwt = "";
 let backendDegraded = false; // true 后不再重试后端，直到设置变更
+let lastRecordedVideoId = "";
 const glossaryMapPromise = loadGlossaryMap();
 
 function cacheSet(key, value) {
@@ -66,6 +67,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
   if (changes.jwt !== undefined) {
     cachedJwt = changes.jwt.newValue ?? "";
+    lastRecordedVideoId = ""; // reset so next video re-records with new identity
   }
 });
 
@@ -88,6 +90,27 @@ async function translateViaBackend(text) {
     return data.translated;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+async function recordHistory(videoId, title, channel, position) {
+  if (!cachedJwt || !cachedBackendUrl || !videoId) return;
+  try {
+    await fetch(`${cachedBackendUrl}/api/history`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cachedJwt}`,
+      },
+      body: JSON.stringify({
+        video_id: videoId,
+        title: title || "Unknown",
+        channel: channel || null,
+        last_position: position || 0,
+      }),
+    });
+  } catch {
+    // fire-and-forget: ignore all errors
   }
 }
 
@@ -136,6 +159,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             translatedText = entries.length
               ? restoreGlossaryPlaceholders(raw, entries)
               : raw;
+            // Record history once per video (fire-and-forget)
+            const msgVideoId = message.videoId || "";
+            if (msgVideoId && msgVideoId !== lastRecordedVideoId) {
+              lastRecordedVideoId = msgVideoId;
+              recordHistory(
+                msgVideoId,
+                message.videoTitle || "",
+                message.videoChannel || null,
+                message.videoPosition || 0
+              );
+            }
           } catch (_backendError) {
             // 降级：标记后不再重试，通知 popup 变黄灯，回退直连 Google
             backendDegraded = true;

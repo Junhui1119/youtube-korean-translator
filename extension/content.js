@@ -40,10 +40,25 @@ function currentCaptionText() {
     .replace(/>>+\s*/g, "");
 }
 
+function getVideoMetadata() {
+  const params = new URLSearchParams(location.search);
+  const videoId = params.get("v") || "";
+  const rawTitle = document.title || "";
+  const videoTitle = rawTitle.replace(/ - YouTube$/, "").trim() || rawTitle;
+  const channelEl = document.querySelector("#channel-name a, #owner-name a");
+  const videoChannel = channelEl ? channelEl.textContent.trim() : null;
+  const video = document.querySelector("video");
+  const videoPosition = video ? Math.floor(video.currentTime) : 0;
+  return { videoId, videoTitle, videoChannel, videoPosition };
+}
+
 function requestTranslation(text) {
   if (!enabled) return;
 
-  chrome.runtime.sendMessage({ type: "TRANSLATE_TEXT", text }, (response) => {
+  const { videoId, videoTitle, videoChannel, videoPosition } = getVideoMetadata();
+  chrome.runtime.sendMessage(
+    { type: "TRANSLATE_TEXT", text, videoId, videoTitle, videoChannel, videoPosition },
+    (response) => {
     if (!enabled) return;
     if (text !== lastCaptionText) return; // a newer caption replaced this one while we were waiting
 
@@ -53,7 +68,8 @@ function requestTranslation(text) {
     }
 
     renderText(response?.text || text, response?.ok ? "translated" : "error");
-  });
+    }
+  );
 }
 
 function scheduleGuidance() {
