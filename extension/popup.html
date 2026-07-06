@@ -153,6 +153,65 @@
         margin: 6px 0 0;
         min-height: 16px;
       }
+
+      .history-section {
+        margin-top: 12px;
+      }
+
+      .history-title {
+        font-size: 11px;
+        color: #999;
+        margin: 0 0 6px;
+      }
+
+      .history-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .history-item a {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        padding: 4px 6px;
+        border-radius: 4px;
+        background: #f9f9f9;
+      }
+
+      .history-item a:hover {
+        background: #f0f0f0;
+      }
+
+      .history-item-title {
+        font-size: 11px;
+        color: #222;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 180px;
+        display: block;
+      }
+
+      .history-item-channel {
+        font-size: 10px;
+        color: #999;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 180px;
+        display: block;
+      }
+
+      .history-empty {
+        font-size: 11px;
+        color: #bbb;
+        text-align: center;
+        padding: 6px 0;
+      }
     </style>
   </head>
   <body>
@@ -203,6 +262,15 @@
         <button id="saveBackend" class="save-btn">保存</button>
       </div>
       <p id="backendTag" class="engine-tag"></p>
+
+      <!-- History section: shown only when logged in -->
+      <div id="history-section" class="history-section" hidden>
+        <hr class="divider" />
+        <p class="history-title">最近观看</p>
+        <ul id="history-list" class="history-list">
+          <li class="history-empty">加载中…</li>
+        </ul>
+      </div>
     </div>
 
     <script src="popup.js" type="module"></script>

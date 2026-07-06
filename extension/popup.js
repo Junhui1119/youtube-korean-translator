@@ -19,6 +19,8 @@ const backendUrlInput   = document.getElementById("backendUrl");
 const backendTokenInput = document.getElementById("backendToken");
 const saveBackendBtn    = document.getElementById("saveBackend");
 const backendTag        = document.getElementById("backendTag");
+const historySection    = document.getElementById("history-section");
+const historyList       = document.getElementById("history-list");
 
 // ── JWT helpers ──────────────────────────────────────────────
 function decodeJwtExp(token) {
@@ -95,6 +97,37 @@ function initMainViewFields({ enabled, deeplApiKey, backendUrl, backendToken, ba
   setBackendTag(backendUrl);
 }
 
+// ── History ───────────────────────────────────────────────────
+async function loadHistory(backendUrl, jwt) {
+  historySection.hidden = false;
+  historyList.innerHTML = '<li class="history-empty">加载中…</li>';
+  try {
+    const res = await fetch(`${backendUrl}/api/history?limit=5`, {
+      headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (!res.ok) throw new Error("fetch failed");
+    const items = await res.json();
+    if (!items.length) {
+      historyList.innerHTML = '<li class="history-empty">暂无记录</li>';
+      return;
+    }
+    historyList.innerHTML = items
+      .map(
+        (item) => `
+        <li class="history-item">
+          <a href="https://www.youtube.com/watch?v=${encodeURIComponent(item.video_id)}"
+             target="_blank" rel="noopener">
+            <span class="history-item-title" title="${item.title.replace(/"/g, '&quot;')}">${item.title}</span>
+            ${item.channel ? `<span class="history-item-channel">${item.channel}</span>` : ""}
+          </a>
+        </li>`
+      )
+      .join("");
+  } catch {
+    historyList.innerHTML = '<li class="history-empty">加载失败</li>';
+  }
+}
+
 // ── Init ─────────────────────────────────────────────────────
 chrome.storage.local.get(
   {
@@ -116,6 +149,7 @@ chrome.storage.local.get(
     } else {
       showMainView(store.userEmail);
       initMainViewFields(store);
+      loadHistory(store.backendUrl, store.jwt);
     }
   }
 );
@@ -174,6 +208,7 @@ authSubmit.addEventListener("click", async () => {
       )
     );
     initMainViewFields(store);
+    loadHistory(store.backendUrl, data.token);
   } catch {
     authError.textContent = "网络错误，请检查后端地址";
   } finally {
@@ -190,6 +225,8 @@ logoutBtn.addEventListener("click", () => {
   authSubmit.textContent = "登录";
   authToggle.textContent = "没有账号？注册";
   authError.textContent = "";
+  historySection.hidden = true;
+  historyList.innerHTML = '<li class="history-empty">加载中…</li>';
 });
 
 // ── Existing settings handlers (unchanged) ────────────────────
