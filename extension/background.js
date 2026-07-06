@@ -16,9 +16,12 @@ function cacheSet(key, value) {
   translationCache.set(key, value);
 }
 
-chrome.storage.local.get({ enabled: DEFAULT_ENABLED, deeplApiKey: "" }, (result) => {
-  cachedEnabled = result.enabled;
-  cachedApiKey = result.deeplApiKey;
+const settingsReady = new Promise((resolve) => {
+  chrome.storage.local.get({ enabled: DEFAULT_ENABLED, deeplApiKey: "" }, (result) => {
+    cachedEnabled = result.enabled;
+    cachedApiKey = result.deeplApiKey;
+    resolve();
+  });
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -32,12 +35,13 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "GET_ENABLED") {
-    sendResponse({ enabled: cachedEnabled });
-    return false;
+    settingsReady.then(() => sendResponse({ enabled: cachedEnabled }));
+    return true;
   }
 
   if (message?.type === "TRANSLATE_TEXT") {
     (async () => {
+      await settingsReady;
       const text = typeof message.text === "string" ? message.text : "";
       if (!cachedEnabled) {
         sendResponse({ ok: false, text, error: "Extension disabled" });

@@ -9,6 +9,10 @@ let hasCaptionBeenDetected = false;
 let enabled = true;
 let observerStarted = false;
 
+function getPlayerContainer() {
+  return document.querySelector(".html5-video-player") || document.body;
+}
+
 function getOverlay() {
   let overlay = document.getElementById(OVERLAY_ID);
   if (overlay) return overlay;
@@ -17,8 +21,7 @@ function getOverlay() {
   overlay.id = OVERLAY_ID;
   overlay.hidden = true;
 
-  const player = document.querySelector(".html5-video-player") || document.body;
-  player.appendChild(overlay);
+  getPlayerContainer().appendChild(overlay);
   return overlay;
 }
 
@@ -42,6 +45,7 @@ function requestTranslation(text) {
 
   chrome.runtime.sendMessage({ type: "TRANSLATE_TEXT", text }, (response) => {
     if (!enabled) return;
+    if (text !== lastCaptionText) return; // a newer caption replaced this one while we were waiting
 
     if (chrome.runtime.lastError) {
       renderText(text, "error");
@@ -111,7 +115,7 @@ function startObserver() {
 
   observerStarted = true;
   const observer = new MutationObserver(scheduleCaptionCheck);
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  observer.observe(getPlayerContainer(), { childList: true, subtree: true, characterData: true });
   scheduleCaptionCheck();
 }
 
