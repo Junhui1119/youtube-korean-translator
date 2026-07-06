@@ -1,13 +1,57 @@
-const enabledInput = document.getElementById("enabled");
-const statusEl = document.getElementById("status");
-const apiKeyInput = document.getElementById("apiKey");
-const saveKeyBtn = document.getElementById("saveKey");
-const engineTag = document.getElementById("engineTag");
-const backendUrlInput = document.getElementById("backendUrl");
+// ── DOM refs ────────────────────────────────────────────────
+const loginView     = document.getElementById("login-view");
+const mainView      = document.getElementById("main-view");
+const authTitle     = document.getElementById("auth-title");
+const authEmail     = document.getElementById("auth-email");
+const authPassword  = document.getElementById("auth-password");
+const authSubmit    = document.getElementById("auth-submit");
+const authError     = document.getElementById("auth-error");
+const authToggle    = document.getElementById("auth-toggle");
+const userBar       = document.getElementById("user-bar");
+const userEmailEl   = document.getElementById("user-email");
+const logoutBtn     = document.getElementById("logout-btn");
+const enabledInput  = document.getElementById("enabled");
+const statusEl      = document.getElementById("status");
+const apiKeyInput   = document.getElementById("apiKey");
+const saveKeyBtn    = document.getElementById("saveKey");
+const engineTag     = document.getElementById("engineTag");
+const backendUrlInput   = document.getElementById("backendUrl");
 const backendTokenInput = document.getElementById("backendToken");
-const saveBackendBtn = document.getElementById("saveBackend");
-const backendTag = document.getElementById("backendTag");
+const saveBackendBtn    = document.getElementById("saveBackend");
+const backendTag        = document.getElementById("backendTag");
 
+// ── JWT helpers ──────────────────────────────────────────────
+function decodeJwtExp(token) {
+  try {
+    const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(b64)).exp;
+  } catch {
+    return 0;
+  }
+}
+
+function isJwtValid(token) {
+  return !!token && decodeJwtExp(token) > Date.now() / 1000;
+}
+
+// ── View switching ───────────────────────────────────────────
+function showLoginView() {
+  loginView.hidden = false;
+  mainView.hidden = true;
+}
+
+function showMainView(email) {
+  loginView.hidden = true;
+  mainView.hidden = false;
+  if (email) {
+    userBar.hidden = false;
+    userEmailEl.textContent = email;
+  } else {
+    userBar.hidden = true;
+  }
+}
+
+// ── Status / tag helpers (unchanged logic) ───────────────────
 function setStatus(enabled, degraded = false) {
   if (!enabled) {
     statusEl.textContent = "翻译已关闭";
@@ -41,19 +85,114 @@ function setBackendTag(url) {
   }
 }
 
+function initMainViewFields({ enabled, deeplApiKey, backendUrl, backendToken, backendDegraded }) {
+  enabledInput.checked = enabled;
+  setStatus(enabled, backendDegraded);
+  apiKeyInput.value = deeplApiKey;
+  setEngineTag(deeplApiKey);
+  backendUrlInput.value = backendUrl;
+  backendTokenInput.value = backendToken;
+  setBackendTag(backendUrl);
+}
+
+// ── Init ─────────────────────────────────────────────────────
 chrome.storage.local.get(
-  { enabled: true, deeplApiKey: "", backendUrl: "", backendToken: "", backendDegraded: false },
-  ({ enabled, deeplApiKey, backendUrl, backendToken, backendDegraded: degraded }) => {
-    enabledInput.checked = enabled;
-    setStatus(enabled, degraded);
-    apiKeyInput.value = deeplApiKey;
-    setEngineTag(deeplApiKey);
-    backendUrlInput.value = backendUrl;
-    backendTokenInput.value = backendToken;
-    setBackendTag(backendUrl);
+  {
+    jwt: "",
+    userEmail: "",
+    enabled: true,
+    deeplApiKey: "",
+    backendUrl: "",
+    backendToken: "",
+    backendDegraded: false,
+  },
+  (store) => {
+    if (!store.backendUrl) {
+      // No backend configured: show main view so user can set backend URL
+      showMainView("");
+      initMainViewFields(store);
+    } else if (!isJwtValid(store.jwt)) {
+      showLoginView();
+    } else {
+      showMainView(store.userEmail);
+      initMainViewFields(store);
+    }
   }
 );
 
+// ── Auth form ─────────────────────────────────────────────────
+let isRegisterMode = false;
+
+authToggle.addEventListener("click", (e) => {
+  e.preventDefault();
+  isRegisterMode = !isRegisterMode;
+  authTitle.textContent = isRegisterMode ? "注册账号" : "登录账号";
+  authSubmit.textContent = isRegisterMode ? "注册" : "登录";
+  authToggle.textContent = isRegisterMode ? "已有账号？登录" : "没有账号？注册";
+  authError.textContent = "";
+});
+
+authSubmit.addEventListener("click", async () => {
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+  authError.textContent = "";
+
+  if (!email || !password) {
+    authError.textContent = "请填写邮箱和密码";
+    return;
+  }
+
+  const { backendUrl } = await new Promise((resolve) =>
+    chrome.storage.local.get({ backendUrl: "" }, resolve)
+  );
+
+  if (!backendUrl) {
+    authError.textContent = "请先配置后端地址";
+    return;
+  }
+
+  const endpoint = isRegisterMode ? "/api/auth/register" : "/api/auth/login";
+  authSubmit.disabled = true;
+
+  try {
+    const res = await fetch(`${backendUrl}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      authError.textContent = data.detail || (isRegisterMode ? "注册失败" : "邮箱或密码错误");
+      return;
+    }
+    chrome.storage.local.set({ jwt: data.token, userEmail: data.email });
+    showMainView(data.email || email);
+    const store = await new Promise((resolve) =>
+      chrome.storage.local.get(
+        { enabled: true, deeplApiKey: "", backendUrl: "", backendToken: "", backendDegraded: false },
+        resolve
+      )
+    );
+    initMainViewFields(store);
+  } catch {
+    authError.textContent = "网络错误，请检查后端地址";
+  } finally {
+    authSubmit.disabled = false;
+  }
+});
+
+// ── Logout ────────────────────────────────────────────────────
+logoutBtn.addEventListener("click", () => {
+  chrome.storage.local.remove(["jwt", "userEmail"]);
+  showLoginView();
+  isRegisterMode = false;
+  authTitle.textContent = "登录账号";
+  authSubmit.textContent = "登录";
+  authToggle.textContent = "没有账号？注册";
+  authError.textContent = "";
+});
+
+// ── Existing settings handlers (unchanged) ────────────────────
 enabledInput.addEventListener("change", () => {
   const enabled = enabledInput.checked;
   chrome.storage.local.set({ enabled });
