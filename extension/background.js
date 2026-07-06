@@ -1,5 +1,9 @@
 import { translateText } from "./src/translate.js";
-import { loadGlossaryMap } from "./src/glossary.js";
+import {
+  loadGlossaryMap,
+  applyGlossaryPlaceholders,
+  restoreGlossaryPlaceholders,
+} from "./src/glossary.js";
 
 const DEFAULT_ENABLED = true;
 const CACHE_MAX = 200;
@@ -7,6 +11,9 @@ const translationCache = new Map();
 
 let cachedEnabled = DEFAULT_ENABLED;
 let cachedApiKey = "";
+let cachedBackendUrl = "";
+let cachedBackendToken = "";
+let backendDegraded = false; // true 后不再重试后端，直到设置变更
 const glossaryMapPromise = loadGlossaryMap();
 
 function cacheSet(key, value) {
@@ -17,11 +24,16 @@ function cacheSet(key, value) {
 }
 
 const settingsReady = new Promise((resolve) => {
-  chrome.storage.local.get({ enabled: DEFAULT_ENABLED, deeplApiKey: "" }, (result) => {
-    cachedEnabled = result.enabled;
-    cachedApiKey = result.deeplApiKey;
-    resolve();
-  });
+  chrome.storage.local.get(
+    { enabled: DEFAULT_ENABLED, deeplApiKey: "", backendUrl: "", backendToken: "" },
+    (result) => {
+      cachedEnabled = result.enabled;
+      cachedApiKey = result.deeplApiKey;
+      cachedBackendUrl = result.backendUrl;
+      cachedBackendToken = result.backendToken;
+      resolve();
+    }
+  );
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -31,7 +43,38 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     cachedApiKey = changes.deeplApiKey.newValue;
     translationCache.clear();
   }
+  if (changes.backendUrl !== undefined) {
+    cachedBackendUrl = changes.backendUrl.newValue;
+    backendDegraded = false; // 设置变更后重置降级状态
+    translationCache.clear();
+  }
+  if (changes.backendToken !== undefined) {
+    cachedBackendToken = changes.backendToken.newValue;
+    backendDegraded = false;
+    translationCache.clear();
+  }
 });
+
+async function translateViaBackend(text) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(`${cachedBackendUrl}/api/translate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cachedBackendToken}`,
+      },
+      body: JSON.stringify({ text, engine: "deepl" }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    return data.translated;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "GET_ENABLED") {
@@ -55,14 +98,39 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
 
-        const cacheKey = `${cachedApiKey ? "deepl" : "google"}:${normalizedText}`;
+        const useBackend = !!(cachedBackendUrl && cachedBackendToken && !backendDegraded);
+        const cacheKey = useBackend
+          ? `backend:${normalizedText}`
+          : `${cachedApiKey ? "deepl" : "google"}:${normalizedText}`;
+
         if (translationCache.has(cacheKey)) {
           sendResponse({ ok: true, text: translationCache.get(cacheKey) });
           return;
         }
 
         const glossaryMap = await glossaryMapPromise;
-        const translatedText = await translateText(normalizedText, cachedApiKey, glossaryMap);
+        let translatedText;
+
+        if (useBackend) {
+          const { processed, entries } = glossaryMap?.size
+            ? applyGlossaryPlaceholders(normalizedText, glossaryMap)
+            : { processed: normalizedText, entries: [] };
+
+          try {
+            const raw = await translateViaBackend(processed);
+            translatedText = entries.length
+              ? restoreGlossaryPlaceholders(raw, entries)
+              : raw;
+          } catch (_backendError) {
+            // 降级：标记后不再重试，通知 popup 变黄灯，回退直连 Google
+            backendDegraded = true;
+            chrome.runtime.sendMessage({ type: "BACKEND_DEGRADED" });
+            translatedText = await translateText(normalizedText, null, glossaryMap);
+          }
+        } else {
+          translatedText = await translateText(normalizedText, cachedApiKey, glossaryMap);
+        }
+
         cacheSet(cacheKey, translatedText);
         sendResponse({ ok: true, text: translatedText });
       } catch (error) {
