@@ -21,6 +21,8 @@ const saveBackendBtn    = document.getElementById("saveBackend");
 const backendTag        = document.getElementById("backendTag");
 const historySection    = document.getElementById("history-section");
 const historyList       = document.getElementById("history-list");
+const asrSection        = document.getElementById("asr-section");
+const asrBtn            = document.getElementById("asr-btn");
 
 // ── JWT helpers ──────────────────────────────────────────────
 function decodeJwtExp(token) {
@@ -51,6 +53,7 @@ function showMainView(email) {
   } else {
     userBar.hidden = true;
   }
+  asrSection.hidden = !email;
 }
 
 // ── Status / tag helpers (unchanged logic) ───────────────────
@@ -84,6 +87,16 @@ function setBackendTag(url) {
   } else {
     backendTag.textContent = "直连模式";
     backendTag.className = "engine-tag";
+  }
+}
+
+function setAsrButton(active) {
+  if (active) {
+    asrBtn.textContent = "⏹ 停止识别";
+    asrBtn.classList.add("active");
+  } else {
+    asrBtn.textContent = "🎙 语音识别";
+    asrBtn.classList.remove("active");
   }
 }
 
@@ -138,6 +151,7 @@ chrome.storage.local.get(
     backendUrl: "",
     backendToken: "",
     backendDegraded: false,
+    asrActive: false,
   },
   (store) => {
     if (!store.backendUrl) {
@@ -149,6 +163,7 @@ chrome.storage.local.get(
     } else {
       showMainView(store.userEmail);
       initMainViewFields(store);
+      setAsrButton(store.asrActive);
       loadHistory(store.backendUrl, store.jwt);
     }
   }
@@ -227,6 +242,9 @@ logoutBtn.addEventListener("click", () => {
   authError.textContent = "";
   historySection.hidden = true;
   historyList.innerHTML = '<li class="history-empty">加载中…</li>';
+  chrome.runtime.sendMessage({ type: "STOP_ASR" }).catch(() => {});
+  asrSection.hidden = true;
+  setAsrButton(false);
 });
 
 // ── Existing settings handlers (unchanged) ────────────────────
@@ -273,8 +291,26 @@ saveBackendBtn.addEventListener("click", async () => {
   setTimeout(() => (saveBackendBtn.textContent = "保存"), 1500);
 });
 
+asrBtn.addEventListener("click", () => {
+  chrome.storage.local.get({ asrActive: false }, (store) => {
+    if (store.asrActive) {
+      chrome.runtime.sendMessage({ type: "STOP_ASR" }).catch(() => {});
+      chrome.storage.local.set({ asrActive: false });
+      setAsrButton(false);
+    } else {
+      chrome.runtime.sendMessage({ type: "START_ASR" }).catch(() => {});
+      chrome.storage.local.set({ asrActive: true });
+      setAsrButton(true);
+    }
+  });
+});
+
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === "BACKEND_DEGRADED") {
     setStatus(enabledInput.checked, true);
+  }
+  if (message?.type === "ASR_STOPPED") {
+    setAsrButton(false);
+    chrome.storage.local.set({ asrActive: false });
   }
 });
