@@ -16,6 +16,7 @@ import db
 import history_repo
 from middleware import log_translate_request
 import translate_service
+import asr
 
 
 @asynccontextmanager
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(asr.router)
 
 app.add_middleware(
     CORSMiddleware,

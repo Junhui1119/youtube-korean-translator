@@ -8,6 +8,8 @@ let guidanceTimer = null;
 let hasCaptionBeenDetected = false;
 let enabled = true;
 let observerStarted = false;
+let asrMode = false;
+let asrFadeTimer = null;
 
 function getPlayerContainer() {
   return document.querySelector(".html5-video-player") || document.body;
@@ -88,7 +90,7 @@ function cancelGuidance() {
 }
 
 function scheduleCaptionCheck() {
-  if (!enabled) return;
+  if (!enabled || asrMode) return;
 
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
@@ -169,5 +171,27 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     renderText("");
   } else {
     startObserver();
+  }
+});
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "ASR_INTERIM") {
+    asrMode = true;
+    clearTimeout(asrFadeTimer);
+    renderText(`${message.text}　识别中…`, "asr-interim");
+  } else if (message?.type === "ASR_FINAL") {
+    asrMode = true;
+    clearTimeout(asrFadeTimer);
+    const display = message.chinese || message.korean || "";
+    if (display) renderText(display, "translated");
+    asrFadeTimer = setTimeout(() => renderText(""), 3000);
+  } else if (message?.type === "ASR_ERROR") {
+    clearTimeout(asrFadeTimer);
+    renderText("语音识别中断", "error");
+    asrFadeTimer = setTimeout(() => renderText(""), 3000);
+  } else if (message?.type === "ASR_STOPPED") {
+    asrMode = false;
+    clearTimeout(asrFadeTimer);
+    renderText("");
   }
 });
