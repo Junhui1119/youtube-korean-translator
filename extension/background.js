@@ -120,12 +120,15 @@ async function recordHistory(videoId, title, channel, position) {
 
 async function startAsr() {
   if (asrActive) return;
+  console.log("[ASR] startAsr: waiting for settingsReady");
 
   await settingsReady;
+  console.log("[ASR] settingsReady done, backendUrl:", cachedBackendUrl, "jwt:", cachedJwt ? "set" : "EMPTY");
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) return;
+  if (!tab?.id) { console.log("[ASR] no active tab"); return; }
   asrTabId = tab.id;
+  console.log("[ASR] tabId:", tab.id, tab.url);
 
   let streamId;
   try {
@@ -138,12 +141,15 @@ async function startAsr() {
         }
       });
     });
+    console.log("[ASR] streamId:", streamId);
   } catch (e) {
+    console.error("[ASR] tabCapture error:", e.message);
     chrome.runtime.sendMessage({ type: "ASR_ERROR", message: e.message }).catch(() => {});
     return;
   }
 
   const hasDoc = await chrome.offscreen.hasDocument().catch(() => false);
+  console.log("[ASR] hasOffscreenDoc:", hasDoc);
   if (!hasDoc) {
     await chrome.offscreen.createDocument({
       url: "offscreen.html",
@@ -152,7 +158,7 @@ async function startAsr() {
     });
   }
 
-  await chrome.runtime.sendMessage({ type: "START_OFFSCREEN", streamId }).catch(() => {});
+  await chrome.runtime.sendMessage({ type: "START_OFFSCREEN", streamId }).catch((e) => console.error("[ASR] START_OFFSCREEN error:", e));
 
   asrRetried = false;
   asrActive = true;
@@ -162,10 +168,12 @@ async function startAsr() {
 
 function connectAsrWebSocket() {
   if (!cachedBackendUrl || !cachedJwt) {
+    console.error("[ASR] connectAsrWebSocket: missing backendUrl or jwt, stopping");
     stopAsr();
     return;
   }
   const wsUrl = cachedBackendUrl.replace(/^http/, "ws") + `/ws/asr?token=${cachedJwt}`;
+  console.log("[ASR] connecting WS:", wsUrl.replace(/token=.*/, "token=***"));
   asrWs = new WebSocket(wsUrl);
 
   asrWs.onmessage = (event) => {
@@ -187,7 +195,9 @@ function connectAsrWebSocket() {
     }
   };
 
-  asrWs.onclose = () => {
+  asrWs.onopen = () => console.log("[ASR] WebSocket connected");
+  asrWs.onclose = (e) => {
+    console.log("[ASR] WebSocket closed, code:", e.code, "reason:", e.reason);
     if (!asrActive) return;
     if (!asrRetried) {
       asrRetried = true;
@@ -197,7 +207,8 @@ function connectAsrWebSocket() {
     }
   };
 
-  asrWs.onerror = () => {
+  asrWs.onerror = (e) => {
+    console.error("[ASR] WebSocket error:", e);
     asrWs?.close();
   };
 }

@@ -31,7 +31,7 @@ app.include_router(asr.router)
 
 @app.get("/api/hello")
 def hello():
-    return {"msg": "hello", "asr_routes": [r.path for r in asr.router.routes]}
+    return {"msg": "hello", "v": 3, "asr_routes": [r.path for r in asr.router.routes]}
 
 
 class RecordWatchRequest(BaseModel):
