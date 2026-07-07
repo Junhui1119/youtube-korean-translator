@@ -8,7 +8,6 @@ from typing import Literal
 
 import asyncpg
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 import auth_service
@@ -28,13 +27,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(asr.router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 @app.get("/api/hello")
