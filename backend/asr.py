@@ -1,6 +1,5 @@
 import os
 
-from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents
 from fastapi import APIRouter, Query, WebSocket
 
 import auth_service
@@ -22,6 +21,13 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
     deepgram_api_key = os.environ.get("DEEPGRAM_API_KEY", "")
     if not deepgram_api_key:
         await websocket.close(code=4002)
+        return
+
+    try:
+        from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents
+    except ImportError as e:
+        await websocket.send_json({"type": "error", "message": f"Deepgram SDK not available: {e}"})
+        await websocket.close()
         return
 
     dg_client = DeepgramClient(deepgram_api_key)
