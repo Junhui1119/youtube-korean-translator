@@ -30,13 +30,23 @@ function cacheSet(key, value) {
 
 const settingsReady = new Promise((resolve) => {
   chrome.storage.local.get(
-    { enabled: DEFAULT_ENABLED, deeplApiKey: "", backendUrl: "", backendToken: "", jwt: "" },
+    {
+      enabled: DEFAULT_ENABLED,
+      deeplApiKey: "",
+      backendUrl: "",
+      backendToken: "",
+      jwt: "",
+      asrActive: false,
+      asrTabId: null,
+    },
     (result) => {
       cachedEnabled = result.enabled;
       cachedApiKey = result.deeplApiKey;
       cachedBackendUrl = result.backendUrl;
       cachedBackendToken = result.backendToken;
       cachedJwt = result.jwt;
+      asrActive = result.asrActive === true;
+      asrTabId = result.asrTabId; // restore after SW restart
       resolve();
     }
   );
@@ -71,6 +81,12 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes.jwt !== undefined) {
     cachedJwt = changes.jwt.newValue ?? "";
     lastRecordedVideoId = ""; // reset so next video re-records with new identity
+  }
+  if (changes.asrActive !== undefined) {
+    asrActive = changes.asrActive.newValue === true;
+  }
+  if (changes.asrTabId !== undefined) {
+    asrTabId = changes.asrTabId.newValue ?? null;
   }
 });
 
@@ -126,6 +142,7 @@ async function startAsr() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
   asrTabId = tab.id;
+  chrome.storage.local.set({ asrTabId: tab.id });
 
   let streamId;
   try {
@@ -167,7 +184,7 @@ async function stopAsr(intentional = true) {
   }
   asrActive = false;
   asrTabId = null;
-  chrome.storage.local.set({ asrActive: false });
+  chrome.storage.local.set({ asrActive: false, asrTabId: null });
 
   chrome.runtime.sendMessage({ type: "STOP_OFFSCREEN" }).catch(() => {});
   chrome.offscreen.closeDocument().catch(() => {});
@@ -264,7 +281,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   // Messages relayed from offscreen (transcript results)
   if (message?.type === "interim" || message?.type === "final" || message?.type === "error") {
-    if (asrTabId) {
+    (async () => {
+      await settingsReady; // ensure asrTabId restored after SW restart
+      if (!asrTabId) return;
       if (message.type === "interim") {
         chrome.tabs.sendMessage(asrTabId, { type: "ASR_INTERIM", text: message.text }).catch(() => {});
       } else if (message.type === "final") {
@@ -272,23 +291,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       } else {
         chrome.tabs.sendMessage(asrTabId, { type: "ASR_ERROR", message: message.message }).catch(() => {});
       }
-    }
+    })();
     return false;
   }
 
   // WebSocket closed in offscreen — reconnect once, then give up
   if (message?.type === "WS_CLOSED") {
-    if (!asrActive) return false;
-    if (message.code === 4001 || message.code === 4002) {
-      stopAsr();
-      return false;
-    }
-    if (!asrRetried) {
-      asrRetried = true;
-      setTimeout(startAsr, 3000);
-    } else {
-      stopAsr();
-    }
+    (async () => {
+      await settingsReady;
+      if (!asrActive) return;
+      if (message.code === 4001 || message.code === 4002) {
+        stopAsr();
+        return;
+      }
+      if (!asrRetried) {
+        asrRetried = true;
+        setTimeout(startAsr, 3000);
+      } else {
+        stopAsr();
+      }
+    })();
     return false;
   }
 
