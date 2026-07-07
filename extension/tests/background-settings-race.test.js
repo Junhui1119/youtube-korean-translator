@@ -14,16 +14,30 @@ function installChromeMock({ storageDelayMs, enabled, deeplApiKey = "" }) {
           messageListener = fn;
         },
       },
+      sendMessage() { return Promise.resolve(); },
     },
     storage: {
       local: {
         get(_defaults, callback) {
           setTimeout(() => callback({ enabled, deeplApiKey }), storageDelayMs);
         },
+        set() {},
       },
       onChanged: {
         addListener() {},
       },
+    },
+    tabs: {
+      onActivated: { addListener() {} },
+      query() { return Promise.resolve([]); },
+    },
+    tabCapture: {
+      getMediaStreamId(_opts, cb) { cb(null); },
+    },
+    offscreen: {
+      hasDocument() { return Promise.resolve(false); },
+      createDocument() { return Promise.resolve(); },
+      closeDocument() { return Promise.resolve(); },
     },
   };
 

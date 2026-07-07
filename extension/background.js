@@ -16,6 +16,10 @@ let cachedBackendToken = "";
 let cachedJwt = "";
 let backendDegraded = false; // true 后不再重试后端，直到设置变更
 let lastRecordedVideoId = "";
+let asrActive = false;
+let asrWs = null;
+let asrRetried = false;
+let asrTabId = null;
 const glossaryMapPromise = loadGlossaryMap();
 
 function cacheSet(key, value) {
@@ -114,6 +118,110 @@ async function recordHistory(videoId, title, channel, position) {
   }
 }
 
+async function startAsr() {
+  if (asrActive) return;
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+  asrTabId = tab.id;
+
+  let streamId;
+  try {
+    streamId = await new Promise((resolve, reject) => {
+      chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }, (id) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(id);
+        }
+      });
+    });
+  } catch (e) {
+    chrome.runtime.sendMessage({ type: "ASR_ERROR", message: e.message }).catch(() => {});
+    return;
+  }
+
+  const hasDoc = await chrome.offscreen.hasDocument().catch(() => false);
+  if (!hasDoc) {
+    await chrome.offscreen.createDocument({
+      url: "offscreen.html",
+      reasons: ["USER_MEDIA"],
+      justification: "Tab audio capture for speech recognition",
+    });
+  }
+
+  await chrome.runtime.sendMessage({ type: "START_OFFSCREEN", streamId }).catch(() => {});
+
+  asrRetried = false;
+  asrActive = true;
+  chrome.storage.local.set({ asrActive: true });
+  connectAsrWebSocket();
+}
+
+function connectAsrWebSocket() {
+  if (!cachedBackendUrl || !cachedJwt) {
+    stopAsr();
+    return;
+  }
+  const wsUrl = cachedBackendUrl.replace(/^http/, "ws") + `/ws/asr?token=${cachedJwt}`;
+  asrWs = new WebSocket(wsUrl);
+
+  asrWs.onmessage = async (event) => {
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
+    const tab = tabs[0];
+    if (!tab?.id) return;
+
+    if (msg.type === "interim") {
+      chrome.tabs.sendMessage(tab.id, { type: "ASR_INTERIM", text: msg.text }).catch(() => {});
+    } else if (msg.type === "final") {
+      chrome.tabs.sendMessage(tab.id, { type: "ASR_FINAL", korean: msg.korean, chinese: msg.chinese }).catch(() => {});
+    } else if (msg.type === "error") {
+      chrome.tabs.sendMessage(tab.id, { type: "ASR_ERROR", message: msg.message }).catch(() => {});
+    }
+  };
+
+  asrWs.onclose = () => {
+    if (!asrActive) return;
+    if (!asrRetried) {
+      asrRetried = true;
+      setTimeout(connectAsrWebSocket, 3000);
+    } else {
+      stopAsr();
+    }
+  };
+
+  asrWs.onerror = () => {
+    asrWs?.close();
+  };
+}
+
+async function stopAsr(intentional = true) {
+  if (!asrActive && intentional) {
+    chrome.runtime.sendMessage({ type: "ASR_STOPPED" }).catch(() => {});
+    return;
+  }
+  asrActive = false;
+  asrTabId = null;
+  chrome.storage.local.set({ asrActive: false });
+
+  if (asrWs) {
+    asrWs.onclose = null;
+    asrWs.close();
+    asrWs = null;
+  }
+
+  chrome.runtime.sendMessage({ type: "STOP_OFFSCREEN" }).catch(() => {});
+  chrome.offscreen.closeDocument().catch(() => {});
+  chrome.runtime.sendMessage({ type: "ASR_STOPPED" }).catch(() => {});
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "GET_ENABLED") {
     settingsReady.then(() => sendResponse({ enabled: cachedEnabled }));
@@ -190,5 +298,28 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "START_ASR") {
+    startAsr();
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (message?.type === "STOP_ASR") {
+    stopAsr(true);
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (message?.type === "PCM_CHUNK") {
+    if (asrWs?.readyState === WebSocket.OPEN) {
+      asrWs.send(message.buffer);
+    }
+    return false;
+  }
+
   return false;
+});
+
+chrome.tabs.onActivated.addListener(() => {
+  if (asrActive) stopAsr(true);
 });
