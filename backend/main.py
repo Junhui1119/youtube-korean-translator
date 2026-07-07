@@ -32,8 +32,8 @@ app.include_router(asr.router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["POST", "GET", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-User-Token"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
