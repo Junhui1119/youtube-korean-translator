@@ -121,6 +121,8 @@ async function recordHistory(videoId, title, channel, position) {
 async function startAsr() {
   if (asrActive) return;
 
+  await settingsReady;
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
   asrTabId = tab.id;
