@@ -44,7 +44,7 @@ function showLoginView() {
   mainView.hidden = true;
 }
 
-function showMainView(email) {
+function showMainView(email, jwt = "") {
   loginView.hidden = true;
   mainView.hidden = false;
   if (email) {
@@ -53,7 +53,7 @@ function showMainView(email) {
   } else {
     userBar.hidden = true;
   }
-  asrSection.hidden = !email;
+  asrSection.hidden = !isJwtValid(jwt);
 }
 
 // ── Status / tag helpers (unchanged logic) ───────────────────
@@ -161,7 +161,7 @@ chrome.storage.local.get(
     } else if (!isJwtValid(store.jwt)) {
       showLoginView();
     } else {
-      showMainView(store.userEmail);
+      showMainView(store.userEmail, store.jwt);
       initMainViewFields(store);
       setAsrButton(store.asrActive);
       loadHistory(store.backendUrl, store.jwt);
@@ -215,7 +215,7 @@ authSubmit.addEventListener("click", async () => {
       return;
     }
     chrome.storage.local.set({ jwt: data.token, userEmail: data.email });
-    showMainView(data.email || email);
+    showMainView(data.email || email, data.token);
     const store = await new Promise((resolve) =>
       chrome.storage.local.get(
         { enabled: true, deeplApiKey: "", backendUrl: "", backendToken: "", backendDegraded: false },

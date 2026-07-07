@@ -166,7 +166,7 @@ function connectAsrWebSocket() {
   const wsUrl = cachedBackendUrl.replace(/^http/, "ws") + `/ws/asr?token=${cachedJwt}`;
   asrWs = new WebSocket(wsUrl);
 
-  asrWs.onmessage = async (event) => {
+  asrWs.onmessage = (event) => {
     let msg;
     try {
       msg = JSON.parse(event.data);
@@ -174,16 +174,14 @@ function connectAsrWebSocket() {
       return;
     }
 
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
-    const tab = tabs[0];
-    if (!tab?.id) return;
+    if (!asrTabId) return;
 
     if (msg.type === "interim") {
-      chrome.tabs.sendMessage(tab.id, { type: "ASR_INTERIM", text: msg.text }).catch(() => {});
+      chrome.tabs.sendMessage(asrTabId, { type: "ASR_INTERIM", text: msg.text }).catch(() => {});
     } else if (msg.type === "final") {
-      chrome.tabs.sendMessage(tab.id, { type: "ASR_FINAL", korean: msg.korean, chinese: msg.chinese }).catch(() => {});
+      chrome.tabs.sendMessage(asrTabId, { type: "ASR_FINAL", korean: msg.korean, chinese: msg.chinese }).catch(() => {});
     } else if (msg.type === "error") {
-      chrome.tabs.sendMessage(tab.id, { type: "ASR_ERROR", message: msg.message }).catch(() => {});
+      chrome.tabs.sendMessage(asrTabId, { type: "ASR_ERROR", message: msg.message }).catch(() => {});
     }
   };
 
