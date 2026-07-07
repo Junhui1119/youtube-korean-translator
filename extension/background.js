@@ -17,7 +17,6 @@ let cachedJwt = "";
 let backendDegraded = false; // true 后不再重试后端，直到设置变更
 let lastRecordedVideoId = "";
 let asrActive = false;
-let asrWs = null;
 let asrRetried = false;
 let asrTabId = null;
 const glossaryMapPromise = loadGlossaryMap();
@@ -120,15 +119,13 @@ async function recordHistory(videoId, title, channel, position) {
 
 async function startAsr() {
   if (asrActive) return;
-  console.log("[ASR] startAsr: waiting for settingsReady");
 
   await settingsReady;
-  console.log("[ASR] settingsReady done, backendUrl:", cachedBackendUrl, "jwt:", cachedJwt ? "set" : "EMPTY");
+  if (!cachedBackendUrl || !cachedJwt) { stopAsr(); return; }
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) { console.log("[ASR] no active tab"); return; }
+  if (!tab?.id) return;
   asrTabId = tab.id;
-  console.log("[ASR] tabId:", tab.id, tab.url);
 
   let streamId;
   try {
@@ -141,76 +138,26 @@ async function startAsr() {
         }
       });
     });
-    console.log("[ASR] streamId:", streamId);
   } catch (e) {
-    console.error("[ASR] tabCapture error:", e.message);
     chrome.runtime.sendMessage({ type: "ASR_ERROR", message: e.message }).catch(() => {});
     return;
   }
 
+  // Always recreate the offscreen document so the WS url is fresh
   const hasDoc = await chrome.offscreen.hasDocument().catch(() => false);
-  console.log("[ASR] hasOffscreenDoc:", hasDoc);
-  if (!hasDoc) {
-    await chrome.offscreen.createDocument({
-      url: "offscreen.html",
-      reasons: ["USER_MEDIA"],
-      justification: "Tab audio capture for speech recognition",
-    });
-  }
+  if (hasDoc) await chrome.offscreen.closeDocument().catch(() => {});
+  await chrome.offscreen.createDocument({
+    url: "offscreen.html",
+    reasons: ["USER_MEDIA"],
+    justification: "Tab audio capture for speech recognition",
+  });
 
-  await chrome.runtime.sendMessage({ type: "START_OFFSCREEN", streamId }).catch((e) => console.error("[ASR] START_OFFSCREEN error:", e));
+  const wsUrl = cachedBackendUrl.replace(/^http/, "ws") + `/ws/asr?token=${cachedJwt}`;
+  await chrome.runtime.sendMessage({ type: "START_OFFSCREEN", streamId, wsUrl }).catch(() => {});
 
   asrRetried = false;
   asrActive = true;
   chrome.storage.local.set({ asrActive: true });
-  connectAsrWebSocket();
-}
-
-function connectAsrWebSocket() {
-  if (!cachedBackendUrl || !cachedJwt) {
-    console.error("[ASR] connectAsrWebSocket: missing backendUrl or jwt, stopping");
-    stopAsr();
-    return;
-  }
-  const wsUrl = cachedBackendUrl.replace(/^http/, "ws") + `/ws/asr?token=${cachedJwt}`;
-  console.log("[ASR] connecting WS:", wsUrl.replace(/token=.*/, "token=***"));
-  asrWs = new WebSocket(wsUrl);
-
-  asrWs.onmessage = (event) => {
-    let msg;
-    try {
-      msg = JSON.parse(event.data);
-    } catch {
-      return;
-    }
-
-    if (!asrTabId) return;
-
-    if (msg.type === "interim") {
-      chrome.tabs.sendMessage(asrTabId, { type: "ASR_INTERIM", text: msg.text }).catch(() => {});
-    } else if (msg.type === "final") {
-      chrome.tabs.sendMessage(asrTabId, { type: "ASR_FINAL", korean: msg.korean, chinese: msg.chinese }).catch(() => {});
-    } else if (msg.type === "error") {
-      chrome.tabs.sendMessage(asrTabId, { type: "ASR_ERROR", message: msg.message }).catch(() => {});
-    }
-  };
-
-  asrWs.onopen = () => console.log("[ASR] WebSocket connected");
-  asrWs.onclose = (e) => {
-    console.log("[ASR] WebSocket closed, code:", e.code, "reason:", e.reason);
-    if (!asrActive) return;
-    if (!asrRetried) {
-      asrRetried = true;
-      setTimeout(connectAsrWebSocket, 3000);
-    } else {
-      stopAsr();
-    }
-  };
-
-  asrWs.onerror = (e) => {
-    console.error("[ASR] WebSocket error:", e);
-    asrWs?.close();
-  };
 }
 
 async function stopAsr(intentional = true) {
@@ -221,12 +168,6 @@ async function stopAsr(intentional = true) {
   asrActive = false;
   asrTabId = null;
   chrome.storage.local.set({ asrActive: false });
-
-  if (asrWs) {
-    asrWs.onclose = null;
-    asrWs.close();
-    asrWs = null;
-  }
 
   chrome.runtime.sendMessage({ type: "STOP_OFFSCREEN" }).catch(() => {});
   chrome.offscreen.closeDocument().catch(() => {});
@@ -321,9 +262,32 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
-  if (message?.type === "PCM_CHUNK") {
-    if (asrWs?.readyState === WebSocket.OPEN) {
-      asrWs.send(message.buffer);
+  // Messages relayed from offscreen (transcript results)
+  if (message?.type === "interim" || message?.type === "final" || message?.type === "error") {
+    if (asrTabId) {
+      if (message.type === "interim") {
+        chrome.tabs.sendMessage(asrTabId, { type: "ASR_INTERIM", text: message.text }).catch(() => {});
+      } else if (message.type === "final") {
+        chrome.tabs.sendMessage(asrTabId, { type: "ASR_FINAL", korean: message.korean, chinese: message.chinese }).catch(() => {});
+      } else {
+        chrome.tabs.sendMessage(asrTabId, { type: "ASR_ERROR", message: message.message }).catch(() => {});
+      }
+    }
+    return false;
+  }
+
+  // WebSocket closed in offscreen — reconnect once, then give up
+  if (message?.type === "WS_CLOSED") {
+    if (!asrActive) return false;
+    if (message.code === 4001 || message.code === 4002) {
+      stopAsr();
+      return false;
+    }
+    if (!asrRetried) {
+      asrRetried = true;
+      setTimeout(startAsr, 3000);
+    } else {
+      stopAsr();
     }
     return false;
   }

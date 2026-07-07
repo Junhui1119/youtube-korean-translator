@@ -65,7 +65,7 @@ def test_asr_sends_ready_on_valid_connect(client, monkeypatch):
     mock_dg_instance = MagicMock()
     mock_dg_instance.listen.asynclive.v.return_value = mock_conn
 
-    with patch("asr.DeepgramClient", return_value=mock_dg_instance):
+    with patch("deepgram.DeepgramClient", return_value=mock_dg_instance):
         with client.websocket_connect(f"/ws/asr?token={token}") as ws:
             msg = ws.receive_json()
     assert msg == {"type": "ready"}
