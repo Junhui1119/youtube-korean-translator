@@ -1,9 +1,12 @@
+import logging
 import os
 
 from fastapi import APIRouter, Query, WebSocket
 
 import auth_service
 import translate_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -74,12 +77,22 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
         endpointing=300,
     )
 
-    started = await dg_conn.start(options)
+    logger.info("deepgram start begin")
+    try:
+        started = await dg_conn.start(options)
+    except Exception as e:
+        logger.exception("deepgram start exception: %s", e)
+        await websocket.send_json({"type": "error", "message": f"Deepgram start exception: {e}"})
+        await websocket.close()
+        return
+
     if not started:
+        logger.warning("deepgram start fail: start() returned False")
         await websocket.send_json({"type": "error", "message": "Deepgram connection failed"})
         await websocket.close()
         return
 
+    logger.info("deepgram start success")
     await websocket.send_json({"type": "ready"})
 
     try:
