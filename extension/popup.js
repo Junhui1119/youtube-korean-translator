@@ -1,3 +1,6 @@
+document.getElementById("version-tag").textContent =
+  "v" + chrome.runtime.getManifest().version;
+
 // ── DOM refs ────────────────────────────────────────────────
 const loginView     = document.getElementById("login-view");
 const mainView      = document.getElementById("main-view");
