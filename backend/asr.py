@@ -44,6 +44,8 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
             pass
         return
 
+    logger.info("deepgram init success")
+
     async def on_transcript(self, result, **kwargs):
         try:
             alt = result.channel.alternatives[0]
@@ -72,18 +74,26 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
         except Exception:
             pass
 
-    dg_conn.on(LiveTranscriptionEvents.Transcript, on_transcript)
-    dg_conn.on(LiveTranscriptionEvents.Error, on_error)
-
-    options = LiveOptions(
-        model="nova-2",
-        language="ko",
-        encoding="linear16",
-        sample_rate=16000,
-        channels=1,
-        interim_results=True,
-        endpointing=300,
-    )
+    try:
+        dg_conn.on(LiveTranscriptionEvents.Transcript, on_transcript)
+        dg_conn.on(LiveTranscriptionEvents.Error, on_error)
+        options = LiveOptions(
+            model="nova-2",
+            language="ko",
+            encoding="linear16",
+            sample_rate=16000,
+            channels=1,
+            interim_results=True,
+            endpointing=300,
+        )
+    except Exception as e:
+        logger.exception("deepgram setup exception: %s", e)
+        try:
+            await websocket.send_json({"type": "error", "message": f"Deepgram setup failed: {e}"})
+            await websocket.close()
+        except Exception:
+            pass
+        return
 
     logger.info("deepgram start begin")
     try:
