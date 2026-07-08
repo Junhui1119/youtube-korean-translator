@@ -50,6 +50,7 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
         try:
             alt = result.channel.alternatives[0]
             text = alt.transcript
+            logger.info("transcript callback: is_final=%s text=%r", result.is_final, (text or "")[:60])
             if not text:
                 return
             if not result.is_final:
@@ -116,10 +117,18 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
     logger.info("deepgram start success")
     await websocket.send_json({"type": "ready"})
 
+    chunk_count = 0
     try:
         async for chunk in websocket.iter_bytes():
+            chunk_count += 1
+            if chunk_count == 1:
+                logger.info("first audio chunk received len=%d", len(chunk))
+            elif chunk_count % 50 == 0:
+                logger.info("audio chunk #%d", chunk_count)
             try:
                 await dg_conn.send(chunk)
+                if chunk_count == 1:
+                    logger.info("first chunk sent to deepgram")
             except Exception as e:
                 logger.exception("dg_conn.send exception: %s", e)
                 break
