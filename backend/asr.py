@@ -1,5 +1,6 @@
 import logging
 import os
+import uuid
 
 import httpx
 from fastapi import APIRouter, Query, WebSocket
@@ -24,6 +25,7 @@ async def _translate_fast(text: str) -> str:
 @router.websocket("/ws/asr")
 async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
     await websocket.accept()
+    sid = uuid.uuid4().hex[:8]
 
     try:
         auth_service.decode_token(token)
@@ -47,7 +49,7 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
         dg_client = DeepgramClient(deepgram_api_key)
         dg_conn = dg_client.listen.asynclive.v("1")
     except Exception as e:
-        logger.exception("deepgram client init exception: %s", e)
+        logger.exception("sid=%s deepgram client init exception: %s", sid, e)
         try:
             await websocket.send_json({"type": "error", "message": f"Deepgram init failed: {e}"})
             await websocket.close()
@@ -55,15 +57,15 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
             pass
         return
 
-    logger.info("deepgram init success")
+    logger.info("sid=%s deepgram init success", sid)
 
     async def on_transcript(self, result, **kwargs):
         try:
             alt = result.channel.alternatives[0]
             text = alt.transcript
-            logger.info("transcript callback: is_final=%s text=%r", result.is_final, (text or "")[:60])
             if not text:
                 return
+            logger.info("sid=%s transcript is_final=%s text=%r", sid, result.is_final, text[:60])
             if not result.is_final:
                 await websocket.send_json({"type": "interim", "text": text})
             else:
@@ -95,7 +97,7 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
             endpointing=150,
         )
     except Exception as e:
-        logger.exception("deepgram setup exception: %s", e)
+        logger.exception("sid=%s deepgram setup exception: %s", sid, e)
         try:
             await websocket.send_json({"type": "error", "message": f"Deepgram setup failed: {e}"})
             await websocket.close()
@@ -103,11 +105,11 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
             pass
         return
 
-    logger.info("deepgram start begin")
+    logger.info("sid=%s deepgram start begin", sid)
     try:
         started = await dg_conn.start(options)
     except Exception as e:
-        logger.exception("deepgram start exception: %s", e)
+        logger.exception("sid=%s deepgram start exception: %s", sid, e)
         try:
             await websocket.send_json({"type": "error", "message": f"Deepgram start exception: {e}"})
             await websocket.close()
@@ -116,12 +118,12 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
         return
 
     if not started:
-        logger.warning("deepgram start fail: returned False")
+        logger.warning("sid=%s deepgram start fail: returned False", sid)
         await websocket.send_json({"type": "error", "message": "Deepgram connection failed"})
         await websocket.close()
         return
 
-    logger.info("deepgram start success")
+    logger.info("sid=%s deepgram start success", sid)
     await websocket.send_json({"type": "ready"})
 
     chunk_count = 0
@@ -129,17 +131,17 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
         async for chunk in websocket.iter_bytes():
             chunk_count += 1
             if chunk_count == 1:
-                logger.info("first audio chunk received len=%d", len(chunk))
+                logger.info("sid=%s first audio chunk received len=%d", sid, len(chunk))
             elif chunk_count % 50 == 0:
-                logger.info("audio chunk #%d", chunk_count)
+                logger.info("sid=%s audio chunk #%d", sid, chunk_count)
             try:
                 await dg_conn.send(chunk)
                 if chunk_count == 1:
-                    logger.info("first chunk sent to deepgram")
+                    logger.info("sid=%s first chunk sent to deepgram", sid)
             except Exception as e:
-                logger.exception("dg_conn.send exception: %s", e)
+                logger.exception("sid=%s dg_conn.send exception: %s", sid, e)
                 break
     except Exception as e:
-        logger.exception("websocket.iter_bytes exception: %s", e)
+        logger.exception("sid=%s websocket.iter_bytes exception: %s", sid, e)
     finally:
         await dg_conn.finish()
