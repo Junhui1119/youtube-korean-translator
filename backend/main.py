@@ -184,7 +184,7 @@ async def post_translate(
         latency_ms = round((time.monotonic() - t0) * 1000)
         log_translate_request(body.engine, len(body.text), latency_ms, "ok")
         return TranslateResponse(translated=translated, engine=body.engine, latency_ms=latency_ms)
-    except RuntimeError as e:
+    except Exception as e:
         latency_ms = round((time.monotonic() - t0) * 1000)
         log_translate_request(body.engine, len(body.text), latency_ms, "error", str(e))
         raise HTTPException(status_code=502, detail=str(e))
