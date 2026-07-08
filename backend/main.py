@@ -9,6 +9,9 @@ from typing import Literal
 
 logging.basicConfig(level=logging.INFO, force=True)
 
+VERSION = "0.2.0"
+logging.getLogger(__name__).info("backend version: %s", VERSION)
+
 import asyncpg
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
