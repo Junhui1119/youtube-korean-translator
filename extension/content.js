@@ -10,6 +10,8 @@ let enabled = true;
 let observerStarted = false;
 let asrMode = false;
 let asrFadeTimer = null;
+let asrWaitingForChinese = false;
+let asrChineseTimer = null;
 
 function getPlayerContainer() {
   return document.querySelector(".html5-video-player") || document.body;
@@ -177,14 +179,22 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === "ASR_INTERIM") {
     asrMode = true;
+    if (asrWaitingForChinese) return;
     clearTimeout(asrFadeTimer);
     renderText(`${message.text}　识别中…`, "asr-interim");
   } else if (message?.type === "ASR_FINAL") {
     asrMode = true;
     clearTimeout(asrFadeTimer);
-    const display = message.chinese || message.korean || "";
-    if (display) renderText(display, "translated");
-    asrFadeTimer = setTimeout(() => renderText(""), 3000);
+    clearTimeout(asrChineseTimer);
+    if (message.chinese) {
+      asrWaitingForChinese = false;
+      renderText(message.chinese, "translated");
+      asrFadeTimer = setTimeout(() => renderText(""), 3000);
+    } else if (message.korean) {
+      asrWaitingForChinese = true;
+      renderText(message.korean, "asr-interim");
+      asrChineseTimer = setTimeout(() => { asrWaitingForChinese = false; }, 2000);
+    }
   } else if (message?.type === "ASR_ERROR") {
     clearTimeout(asrFadeTimer);
     renderText("语音识别中断", "error");
