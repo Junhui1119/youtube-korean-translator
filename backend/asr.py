@@ -32,8 +32,17 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
         await websocket.close()
         return
 
-    dg_client = DeepgramClient(deepgram_api_key)
-    dg_conn = dg_client.listen.asynclive.v("1")
+    try:
+        dg_client = DeepgramClient(deepgram_api_key)
+        dg_conn = dg_client.listen.asynclive.v("1")
+    except Exception as e:
+        logger.exception("deepgram client init exception: %s", e)
+        try:
+            await websocket.send_json({"type": "error", "message": f"Deepgram init failed: {e}"})
+            await websocket.close()
+        except Exception:
+            pass
+        return
 
     async def on_transcript(self, result, **kwargs):
         try:
