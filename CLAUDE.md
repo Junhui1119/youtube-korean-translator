@@ -98,7 +98,7 @@ Common commands:
 
 ## Conventions
 
-- **所有 git commit 必须先获得用户明确批准，才能执行。** 不得自行 commit，无论改动大小。
+- **所有 git commit 和 git push 必须先获得用户明确批准，才能执行。** 不得自行 commit 或 push，无论改动大小。
 - **读取文件不用经过我的允许。**
 
 ## Current focus

@@ -133,7 +133,7 @@ async function recordHistory(videoId, title, channel, position) {
   }
 }
 
-async function startAsr() {
+async function startAsr(isRetry = false) {
   if (asrActive) return;
 
   await settingsReady;
@@ -170,9 +170,13 @@ async function startAsr() {
   });
 
   const wsUrl = cachedBackendUrl.replace(/^http/, "ws") + `/ws/asr?token=${cachedJwt}`;
-  await chrome.runtime.sendMessage({ type: "START_OFFSCREEN", streamId, wsUrl }).catch(() => {});
+  const offscreenResp = await chrome.runtime.sendMessage({ type: "START_OFFSCREEN", streamId, wsUrl }).catch(() => null);
+  if (!offscreenResp?.ok) {
+    stopAsr(false);
+    return;
+  }
 
-  asrRetried = false;
+  if (!isRetry) asrRetried = false;
   asrActive = true;
   chrome.storage.local.set({ asrActive: true });
 }
@@ -306,7 +310,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       if (!asrRetried) {
         asrRetried = true;
-        setTimeout(startAsr, 3000);
+        asrActive = false;
+        chrome.storage.local.set({ asrActive: false });
+        chrome.offscreen.closeDocument().catch(() => {});
+        setTimeout(() => startAsr(true), 3000);
       } else {
         stopAsr();
       }
