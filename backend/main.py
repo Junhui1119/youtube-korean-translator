@@ -1,10 +1,13 @@
 import hmac
+import logging
 import os
 import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Literal
+
+logging.basicConfig(level=logging.INFO, force=True)
 
 import asyncpg
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
