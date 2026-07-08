@@ -1,6 +1,7 @@
 import logging
 import os
 
+import httpx
 from fastapi import APIRouter, Query, WebSocket
 
 import auth_service
@@ -8,6 +9,16 @@ import translate_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+async def _translate_fast(text: str) -> str:
+    url = "https://translate.googleapis.com/translate_a/single"
+    params = {"client": "gtx", "sl": "ko", "tl": "zh-CN", "dt": "t", "q": text}
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        return "".join(item[0] for item in data[0] if item[0])
 
 
 @router.websocket("/ws/asr")
@@ -56,16 +67,12 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
             if not result.is_final:
                 await websocket.send_json({"type": "interim", "text": text})
             else:
-                deepl_key = os.environ.get("DEEPL_API_KEY", "")
-                chinese = ""
-                if deepl_key:
-                    try:
-                        chinese = await translate_service.translate_deepl(text, deepl_key)
-                    except Exception:
-                        pass
-                await websocket.send_json(
-                    {"type": "final", "korean": text, "chinese": chinese}
-                )
+                await websocket.send_json({"type": "final", "korean": text, "chinese": ""})
+                try:
+                    chinese = await _translate_fast(text)
+                    await websocket.send_json({"type": "final", "korean": text, "chinese": chinese})
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -85,7 +92,7 @@ async def asr_endpoint(websocket: WebSocket, token: str = Query(default="")):
             sample_rate=16000,
             channels=1,
             interim_results=True,
-            endpointing=300,
+            endpointing=150,
         )
     except Exception as e:
         logger.exception("deepgram setup exception: %s", e)
