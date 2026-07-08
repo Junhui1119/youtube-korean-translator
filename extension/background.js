@@ -306,8 +306,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       if (!asrRetried) {
         asrRetried = true;
-        asrActive = false;
-        chrome.storage.local.set({ asrActive: false });
         setTimeout(startAsr, 3000);
       } else {
         stopAsr();
